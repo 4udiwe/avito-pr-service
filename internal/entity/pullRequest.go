@@ -1,30 +1,31 @@
 package entity
 
-type PRStatus struct {
-	ID   int    `db:"id"`
-	Name string `db:"name"`
+type PRStatusName string
+
+const (
+	StatusOPEN   PRStatusName = "OPEN"
+	StatusMERGED PRStatusName = "MERGED"
+)
+
+type Status struct {
+	ID   int
+	Name PRStatusName
 }
 
 type PullRequest struct {
-	ID                string `db:"id"`
-	Title             string `db:"title"`
-	AuthorID          string `db:"author_id"`
-	StatusID          int    `db:"status_id"`
-	NeedMoreReviewers bool   `db:"need_more_reviewers"`
-	CreatedAt         string `db:"created_at"`
-	MergedAt          string `db:"merged_at"`
+	ID                string
+	Title             string
+	AuthorID          string
+	Status            Status
+	NeedMoreReviewers bool
+	CreatedAt         string
+	MergedAt          string
+	Reviewers         []string
 }
 
 type PRReviewer struct {
-	ID         string `db:"id"`
-	PRID       string `db:"pr_id"`
-	ReviewerID string `db:"reviewer_id"`
-	AssignedAt string `db:"assigned_at"`
+	ID         string
+	PRID       string
+	ReviewerID string
+	AssignedAt string
 }
-
-type PRWithReviewerIDs struct {
-	PullRequest
-	ReviewersIDs []string
-}
-
-

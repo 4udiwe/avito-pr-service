@@ -32,7 +32,7 @@ func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UU
 		Suffix("RETURNING created_at").
 		ToSql()
 
-	user := entity.User{
+	rowUser := RowUser{
 		ID:       ID,
 		Name:     name,
 		TeamID:   teamID,
@@ -40,7 +40,7 @@ func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UU
 	}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&user.CreatedAt,
+		&rowUser.CreatedAt,
 	)
 
 	if err != nil {
@@ -55,8 +55,8 @@ func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UU
 		return entity.User{}, err
 	}
 
-	logrus.Infof("UserRepository.Create: user created with ID %s", user.ID)
-	return user, nil
+	logrus.Infof("UserRepository.Create: user created with ID %s", rowUser.ID)
+	return rowUser.ToEntity(), nil
 }
 
 func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error) {
@@ -67,14 +67,14 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error
 		Where("id = ?", ID).
 		ToSql()
 
-	var user entity.User
+	rowUser := RowUser{}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&user.ID,
-		&user.Name,
-		&user.IsActive,
-		&user.TeamID,
-		&user.CreatedAt,
+		&rowUser.ID,
+		&rowUser.Name,
+		&rowUser.IsActive,
+		&rowUser.TeamID,
+		&rowUser.CreatedAt,
 	)
 
 	if err != nil {
@@ -86,8 +86,8 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error
 		return entity.User{}, err
 	}
 
-	logrus.Infof("UserRepository.GetByID: user found with ID %s", user.ID)
-	return user, nil
+	logrus.Infof("UserRepository.GetByID: user found with ID %s", rowUser.ID)
+	return rowUser.ToEntity(), nil
 }
 
 func (r *Repository) GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entity.User, error) {
@@ -107,18 +107,18 @@ func (r *Repository) GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entit
 
 	var users []entity.User
 	for rows.Next() {
-		var user entity.User
+		rowUser := RowUser{}
 		if err := rows.Scan(
-			&user.ID,
-			&user.Name,
-			&user.IsActive,
-			&user.TeamID,
-			&user.CreatedAt,
+			&rowUser.ID,
+			&rowUser.Name,
+			&rowUser.IsActive,
+			&rowUser.TeamID,
+			&rowUser.CreatedAt,
 		); err != nil {
 			logrus.Errorf("UserRepository.GetByTeamID: failed to scan user row for team ID %s: %v", teamID, err)
 			return nil, fmt.Errorf("UserRepository.GetByTeamID: %w", err)
 		}
-		users = append(users, user)
+		users = append(users, rowUser.ToEntity())
 	}
 
 	logrus.Infof("UserRepository.GetByTeamID: found %d users for team ID %s", len(users), teamID)
@@ -184,17 +184,17 @@ func (r *Repository) GetRandomActiveTeammates(ctx context.Context, teamID uuid.U
 
 	var users []entity.User
 	for rows.Next() {
-		var user entity.User
+		rowUser := RowUser{}
 		if err := rows.Scan(
-			&user.ID,
-			&user.Name,
-			&user.TeamID,
-			&user.CreatedAt,
+			&rowUser.ID,
+			&rowUser.Name,
+			&rowUser.TeamID,
+			&rowUser.CreatedAt,
 		); err != nil {
 			logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to scan user row for user ID %s: %v", excludeUserID, err)
 			return nil, fmt.Errorf("UserRepository.GetRandomActiveTeammates: %w", err)
 		}
-		users = append(users, user)
+		users = append(users, rowUser.ToEntity())
 	}
 	logrus.Infof("UserRepository.GetRandomActiveTeammates: found %d random active teammates for user ID %s", len(users), excludeUserID)
 	return users, nil

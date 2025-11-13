@@ -30,11 +30,13 @@ func (r *Repository) Create(ctx context.Context, name string) (entity.Team, erro
 		Suffix("RETURNING id, created_at").
 		ToSql()
 
-	var team entity.Team
+	rowTeam := RowTeam{
+		Name: name,
+	}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&team.ID,
-		&team.CreatedAt,
+		&rowTeam.ID,
+		&rowTeam.CreatedAt,
 	)
 
 	if err != nil {
@@ -49,8 +51,8 @@ func (r *Repository) Create(ctx context.Context, name string) (entity.Team, erro
 		return entity.Team{}, err
 	}
 
-	logrus.Infof("TeamRepository.Create: team created with ID %s", team.ID)
-	return team, nil
+	logrus.Infof("TeamRepository.Create: team created: %s", name)
+	return rowTeam.ToEntity(), nil
 }
 
 func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, error) {
@@ -61,13 +63,13 @@ func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, e
 		Where("name = ?", name).
 		ToSql()
 
-	team := entity.Team{
+	rowTeam := RowTeam{
 		Name: name,
 	}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&team.ID,
-		&team.CreatedAt,
+		&rowTeam.ID,
+		&rowTeam.CreatedAt,
 	)
 
 	if err != nil {
@@ -79,6 +81,6 @@ func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, e
 		return entity.Team{}, err
 	}
 
-	logrus.Infof("TeamRepository.GetByName: team found with ID %s", team.ID)
-	return team, nil
+	logrus.Infof("TeamRepository.GetByName: team found with ID %s", rowTeam.ID)
+	return rowTeam.ToEntity(), nil
 }

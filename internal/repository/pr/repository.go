@@ -31,17 +31,17 @@ func (r *Repository) Create(ctx context.Context, ID, title, authorID string) (en
 		Suffix("RETURNING status_id, need_more_reviewers, created_at, merged_at").
 		ToSql()
 
-	pr := entity.PullRequest{
+	row := RowPullRequest{
 		ID:       ID,
 		Title:    title,
 		AuthorID: authorID,
 	}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&pr.StatusID,
-		&pr.NeedMoreReviewers,
-		&pr.CreatedAt,
-		&pr.MergedAt,
+		&row.StatusID,
+		&row.NeedMoreReviewers,
+		&row.CreatedAt,
+		&row.MergedAt,
 	)
 
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *Repository) Create(ctx context.Context, ID, title, authorID string) (en
 		logrus.Errorf("PRRepository.Create: failed to create PR: %v", err)
 		return entity.PullRequest{}, err
 	}
-	return pr, nil
+	return row.ToEntity(), nil
 }
 
 func (r *Repository) AssignReviewers(ctx context.Context, prID string, reviewerIDs []string) error {
@@ -127,21 +127,33 @@ func (r *Repository) ReassignReviewer(ctx context.Context, prID, oldReviewerID, 
 func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest, error) {
 	logrus.Infof("PRRepository.GetByID: getting PR by ID %s", ID)
 
-	query, args, _ := r.Builder.Select(
-		"id", "title", "author_id", "status_id", "need_more_reviewers", "created_at", "merged_at",
-	).From("pr").
-		Where("id = ?", ID).
+	query, args, _ := r.Builder.
+		Select(
+			"p.id",
+			"p.title",
+			"p.author_id",
+			"p.status_id",
+			"p.need_more_reviewers",
+			"p.created_at",
+			"p.merged_at",
+			"COALESCE(array_agg(r.reviewer_id) FILTER (WHERE r.reviewer_id IS NOT NULL), '{}') AS reviewer_ids",
+		).
+		From("pr AS p").
+		LeftJoin("pr_reviewer AS r ON p.id = r.pr_id").
+		Where("p.id = ?", ID).
+		GroupBy("p.id").
 		ToSql()
 
-	var pr entity.PullRequest
+	var row RowPullRequestWithReviewerIDs
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&pr.ID,
-		&pr.Title,
-		&pr.AuthorID,
-		&pr.StatusID,
-		&pr.NeedMoreReviewers,
-		&pr.CreatedAt,
-		&pr.MergedAt,
+		&row.ID,
+		&row.Title,
+		&row.AuthorID,
+		&row.StatusID,
+		&row.NeedMoreReviewers,
+		&row.CreatedAt,
+		&row.MergedAt,
+		&row.ReviewerIDs,
 	)
 
 	if err != nil {
@@ -153,8 +165,8 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest
 		return entity.PullRequest{}, err
 	}
 
-	logrus.Infof("PRRepository.GetByID: PR found with ID %s", pr.ID)
-	return pr, nil
+	logrus.Infof("PRRepository.GetByID: PR found with ID %s", ID)
+	return row.ToEntity(), nil
 }
 
 func (r *Repository) UpdateStatus(ctx context.Context, ID string, statusID int, mergedAt time.Time) error {
@@ -193,12 +205,17 @@ func (r *Repository) GetReviewersByPR(ctx context.Context, prID string) ([]entit
 
 	var reviewers []entity.PRReviewer
 	for rows.Next() {
-		var rev entity.PRReviewer
-		if err := rows.Scan(&rev.ID, &rev.PRID, &rev.ReviewerID, &rev.AssignedAt); err != nil {
+		var rowReviewer RowPRReviewer
+		if err := rows.Scan(
+			&rowReviewer.ID,
+			&rowReviewer.PRID,
+			&rowReviewer.ReviewerID,
+			&rowReviewer.AssignedAt,
+		); err != nil {
 			logrus.Errorf("PRRepository.GetReviewersByPR: failed to scan reviewer for PR %s: %v", prID, err)
 			return nil, err
 		}
-		reviewers = append(reviewers, rev)
+		reviewers = append(reviewers, rowReviewer.ToEntity())
 	}
 
 	logrus.Infof("PRRepository.GetReviewersByPR: reviewers found for PR %s", prID)
@@ -220,24 +237,24 @@ func (r *Repository) ListByReviewer(ctx context.Context, reviewerID string) ([]e
 	}
 	defer rows.Close()
 
-	var prs []entity.PullRequest
+	var PRs []entity.PullRequest
 	for rows.Next() {
-		var pr entity.PullRequest
+		var rowPR RowPullRequest
 		if err := rows.Scan(
-			&pr.ID, &pr.Title, &pr.AuthorID, &pr.StatusID,
-			&pr.NeedMoreReviewers, &pr.CreatedAt, &pr.MergedAt,
+			&rowPR.ID, &rowPR.Title, &rowPR.AuthorID, &rowPR.StatusID,
+			&rowPR.NeedMoreReviewers, &rowPR.CreatedAt, &rowPR.MergedAt,
 		); err != nil {
 			logrus.Errorf("PRRepository.ListByReviewer: failed to scan PR for reviewer %s: %v", reviewerID, err)
 			return nil, err
 		}
-		prs = append(prs, pr)
+		PRs = append(PRs, rowPR.ToEntity())
 	}
 
 	logrus.Infof("PRRepository.ListByReviewer: PRs found for reviewer %s", reviewerID)
-	return prs, nil
+	return PRs, nil
 }
 
-func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.PRStatus, error) {
+func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.Status, error) {
 	logrus.Infof("PRRepository.GetPRStatuses: getting all PR statuses")
 
 	query, args, _ := r.Builder.Select(
@@ -245,7 +262,7 @@ func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.PRStatus, erro
 	).From("pr_status").
 		ToSql()
 
-	var statuses []entity.PRStatus
+	var statuses []entity.Status
 
 	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
 	if err != nil {
@@ -255,14 +272,38 @@ func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.PRStatus, erro
 	defer rows.Close()
 
 	for rows.Next() {
-		var status entity.PRStatus
-		if err := rows.Scan(&status.ID, &status.Name); err != nil {
+		var rowStatus RowStatus
+		if err := rows.Scan(&rowStatus.ID, &rowStatus.Name); err != nil {
 			logrus.Errorf("PRRepository.GetPRStatuses: failed to scan PR status: %v", err)
 			return nil, err
 		}
-		statuses = append(statuses, status)
+		statuses = append(statuses, rowStatus.ToEntity())
 	}
 
 	logrus.Infof("PRRepository.GetPRStatuses: PR statuses retrieved")
 	return statuses, nil
+}
+
+func (r *Repository) GetStatusByStatusID(ctx context.Context, statusID int) (entity.Status, error) {
+	logrus.Infof("PRRepository.GetStatusByStatusID: getting PR status by ID %d", statusID)
+
+	query, args, _ := r.Builder.Select(
+		"id", "name",
+	).From("pr_status").
+		Where("id = ?", statusID).
+		ToSql()
+
+	var rowStatus RowStatus
+	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(&rowStatus.ID, &rowStatus.Name)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			logrus.Warnf("PRRepository.GetStatusByStatusID: no PR status with ID %d", statusID)
+			return entity.Status{}, repository.ErrStatusNotFound
+		}
+		logrus.Errorf("PRRepository.GetStatusByStatusID: failed to get PR status by ID %d: %v", statusID, err)
+		return entity.Status{}, err
+	}
+	logrus.Infof("PRRepository.GetStatusByStatusID: PR status found with ID %d", statusID)
+	return rowStatus.ToEntity(), nil
 }

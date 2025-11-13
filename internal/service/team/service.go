@@ -24,13 +24,13 @@ func New(userRepo UserRepo, TeamRepo TeamRepo, txManager transactor.Transactor) 
 	}
 }
 
-func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, users []entity.User) (entity.TeamWithMembers, error) {
+func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, users []entity.User) (entity.Team, error) {
 	logrus.Infof("TeamService.CreateTeamWithUsers: creating team %s with %d users", teamName, len(users))
 
-	var teamWithMembers entity.TeamWithMembers
+	var team entity.Team
 
 	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
-		team, err := s.TeamRepo.Create(ctx, teamName)
+		newTeam, err := s.TeamRepo.Create(ctx, teamName)
 
 		if err != nil {
 			if errors.Is(err, repository.ErrTeamAlreadyExists) {
@@ -41,9 +41,9 @@ func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, user
 			return err
 		}
 
-		logrus.Infof("TeamService.CreateTeamWithUsers: created team %s with ID %s", team.Name, team.ID)
+		logrus.Infof("TeamService.CreateTeamWithUsers: created team %s with ID %s", newTeam.Name, newTeam.ID)
 
-		teamWithMembers.Team = team
+		team = newTeam
 
 		for _, u := range users {
 			newUser, err := s.userRepo.Create(ctx, u.ID, u.Name, team.ID, u.IsActive)
@@ -57,25 +57,26 @@ func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, user
 			}
 
 			logrus.Infof("TeamService.CreateTeamWithUsers: created user %s with ID %s", newUser.Name, newUser.ID)
-			teamWithMembers.Members = append(teamWithMembers.Members, newUser)
+			team.Members = append(team.Members, newUser)
 		}
 		return nil
 	})
 
 	if err != nil {
-		return entity.TeamWithMembers{}, ErrCannotCreateTeam
+		return entity.Team{}, ErrCannotCreateTeam
 	}
 
-	return teamWithMembers, nil
+	return team, nil
 }
 
-func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (entity.TeamWithMembers, error) {
+func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (entity.Team, error) {
 	logrus.Infof("TeamService.GetTeamWithMembers: getting team %s with members", teamName)
 
-	var teamWithMembers entity.TeamWithMembers
+	var team entity.Team
 
 	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
-		team, err := s.TeamRepo.GetByName(ctx, teamName)
+		// Get a team
+		rowTeam, err := s.TeamRepo.GetByName(ctx, teamName)
 		if err != nil {
 			if errors.Is(err, repository.ErrTeamNotFound) {
 				logrus.Warnf("TeamService.GetTeamWithMembers: team %s not found", teamName)
@@ -85,10 +86,11 @@ func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (enti
 			return err
 		}
 
-		logrus.Infof("TeamService.GetTeamWithMembers: found team %s with ID %s", team.Name, team.ID)
-		teamWithMembers.Team = team
+		logrus.Infof("TeamService.GetTeamWithMembers: found team %s with ID %s", rowTeam.Name, rowTeam.ID)
+		team = rowTeam
 
-		users, err := s.userRepo.GetByTeamID(ctx, team.ID)
+		// Get members of team
+		users, err := s.userRepo.GetByTeamID(ctx, rowTeam.ID)
 
 		if err != nil {
 			logrus.Errorf("TeamService.GetTeamWithMembers: failed to get users for team %s: %v", teamName, err)
@@ -96,13 +98,13 @@ func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (enti
 		}
 
 		logrus.Infof("TeamService.GetTeamWithMembers: found %d users for team %s", len(users), teamName)
-		teamWithMembers.Members = users
+		team.Members = users
 		return nil
 	})
 
 	if err != nil {
-		return entity.TeamWithMembers{}, ErrCannotFetchTeam
+		return entity.Team{}, ErrCannotFetchTeam
 	}
 
-	return teamWithMembers, nil
+	return team, nil
 }
