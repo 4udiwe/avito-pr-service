@@ -61,7 +61,9 @@ func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, e
 		Where("name = ?", name).
 		ToSql()
 
-	var team entity.Team
+	team := entity.Team{
+		Name: name,
+	}
 
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
 		&team.ID,

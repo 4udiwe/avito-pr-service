@@ -9,5 +9,11 @@ var (
 	ErrTeamAlreadyExists = errors.New("team already exists")
 	ErrTeamNotFound      = errors.New("team not found")
 
-	ErrPRNotFound = errors.New("pull request not found")
+	ErrPRNotFound              = errors.New("pull request not found")
+	ErrPRAlreadyExists         = errors.New("pull request already exists")
+	ErrReviewerAlreadyAssigned = errors.New("reviewer already assigned to this pull request")
+	ErrReviewerNotFound        = errors.New("reviewer not found")
+	ErrAuthorNotFound          = errors.New("author not found")
+
+	ErrStatusNotFound = errors.New("status not found")
 )

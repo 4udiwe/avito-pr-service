@@ -1,0 +1,108 @@
+package team
+
+import (
+	"context"
+	"errors"
+
+	"github.com/4udiwe/avito-pr-service/internal/entity"
+	"github.com/4udiwe/avito-pr-service/internal/repository"
+	"github.com/4udiwe/avito-pr-service/pkg/transactor"
+	"github.com/sirupsen/logrus"
+)
+
+type Service struct {
+	userRepo  UserRepo
+	TeamRepo  TeamRepo
+	txManager transactor.Transactor
+}
+
+func New(userRepo UserRepo, TeamRepo TeamRepo, txManager transactor.Transactor) *Service {
+	return &Service{
+		userRepo:  userRepo,
+		TeamRepo:  TeamRepo,
+		txManager: txManager,
+	}
+}
+
+func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, users []entity.User) (entity.TeamWithMembers, error) {
+	logrus.Infof("TeamService.CreateTeamWithUsers: creating team %s with %d users", teamName, len(users))
+
+	var teamWithMembers entity.TeamWithMembers
+
+	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		team, err := s.TeamRepo.Create(ctx, teamName)
+
+		if err != nil {
+			if errors.Is(err, repository.ErrTeamAlreadyExists) {
+				logrus.Warnf("TeamService.CreateTeamWithUsers: team %s already exists", teamName)
+				return ErrTeamAlreadyExists
+			}
+			logrus.Errorf("TeamService.CreateTeamWithUsers: failed to create team %s: %v", teamName, err)
+			return err
+		}
+
+		logrus.Infof("TeamService.CreateTeamWithUsers: created team %s with ID %s", team.Name, team.ID)
+
+		teamWithMembers.Team = team
+
+		for _, u := range users {
+			newUser, err := s.userRepo.Create(ctx, u.ID, u.Name, team.ID, u.IsActive)
+			if err != nil {
+				if errors.Is(err, repository.ErrUserAlreadyExists) {
+					logrus.Warnf("TeamService.CreateTeamWithUsers: user %s already exists", u.Name)
+					return ErrUserAlreadyExists
+				}
+				logrus.Errorf("TeamService.CreateTeamWithUsers: failed to create user %s: %v", u.Name, err)
+				return err
+			}
+
+			logrus.Infof("TeamService.CreateTeamWithUsers: created user %s with ID %s", newUser.Name, newUser.ID)
+			teamWithMembers.Members = append(teamWithMembers.Members, newUser)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return entity.TeamWithMembers{}, ErrCannotCreateTeam
+	}
+
+	return teamWithMembers, nil
+}
+
+func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (entity.TeamWithMembers, error) {
+	logrus.Infof("TeamService.GetTeamWithMembers: getting team %s with members", teamName)
+
+	var teamWithMembers entity.TeamWithMembers
+
+	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		team, err := s.TeamRepo.GetByName(ctx, teamName)
+		if err != nil {
+			if errors.Is(err, repository.ErrTeamNotFound) {
+				logrus.Warnf("TeamService.GetTeamWithMembers: team %s not found", teamName)
+				return ErrTeamNotFound
+			}
+			logrus.Errorf("TeamService.GetTeamWithMembers: failed to get team %s: %v", teamName, err)
+			return err
+		}
+
+		logrus.Infof("TeamService.GetTeamWithMembers: found team %s with ID %s", team.Name, team.ID)
+		teamWithMembers.Team = team
+
+		users, err := s.userRepo.GetByTeamID(ctx, team.ID)
+
+		if err != nil {
+			logrus.Errorf("TeamService.GetTeamWithMembers: failed to get users for team %s: %v", teamName, err)
+			return err
+		}
+
+		logrus.Infof("TeamService.GetTeamWithMembers: found %d users for team %s", len(users), teamName)
+		teamWithMembers.Members = users
+		return nil
+	})
+
+	if err != nil {
+		return entity.TeamWithMembers{}, ErrCannotFetchTeam
+	}
+
+	return teamWithMembers, nil
+}

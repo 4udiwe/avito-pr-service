@@ -164,3 +164,38 @@ func (r *Repository) SetActiveStatus(ctx context.Context, userID string, isActiv
 	}
 	return nil
 }
+
+func (r *Repository) GetRandomActiveTeammates(ctx context.Context, teamID uuid.UUID, excludeUserID string, limit int) ([]entity.User, error) {
+	logrus.Infof("UserRepository.GetRandomActiveTeammates: getting up to %d random active teammates for user ID %s", limit, excludeUserID)
+
+	query, args, _ := r.Builder.Select("id", "name", "team_id", "created_at").
+		From("users").
+		Where("team_id = ? AND is_active = TRUE AND id != ?", teamID, excludeUserID).
+		OrderBy("RANDOM()").
+		Limit(uint64(limit)).
+		ToSql()
+
+	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
+	if err != nil {
+		logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to query random active teammates for user ID %s: %v", excludeUserID, err)
+		return nil, fmt.Errorf("UserRepository.GetRandomActiveTeammates: %w", err)
+	}
+	defer rows.Close()
+
+	var users []entity.User
+	for rows.Next() {
+		var user entity.User
+		if err := rows.Scan(
+			&user.ID,
+			&user.Name,
+			&user.TeamID,
+			&user.CreatedAt,
+		); err != nil {
+			logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to scan user row for user ID %s: %v", excludeUserID, err)
+			return nil, fmt.Errorf("UserRepository.GetRandomActiveTeammates: %w", err)
+		}
+		users = append(users, user)
+	}
+	logrus.Infof("UserRepository.GetRandomActiveTeammates: found %d random active teammates for user ID %s", len(users), excludeUserID)
+	return users, nil
+}

@@ -5,7 +5,7 @@ type PRStatus struct {
 	Name string `db:"name"`
 }
 
-type PullReqeust struct {
+type PullRequest struct {
 	ID                string `db:"id"`
 	Title             string `db:"title"`
 	AuthorID          string `db:"author_id"`
@@ -23,11 +23,8 @@ type PRReviewer struct {
 }
 
 type PRWithReviewerIDs struct {
-	PullReqeust
+	PullRequest
 	ReviewersIDs []string
 }
 
-type PRWithRewviewers struct {
-	PullReqeust
-	Reviewers []User
-}
+
