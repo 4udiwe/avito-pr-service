@@ -108,3 +108,19 @@ func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (enti
 
 	return team, nil
 }
+
+func (s *Service) GetAllTeams(ctx context.Context, page, pageSize int) ([]entity.Team, int, error) {
+	logrus.Info("TeamService.GetAllTeams: fetching all teams")
+
+	limit := pageSize
+	offset := (page - 1) * pageSize
+
+	teams, total, err := s.TeamRepo.GetAll(ctx, limit, offset)
+	if err != nil {
+		logrus.Errorf("TeamService.GetAllTeams: failed to fetch teams %v", err)
+		return nil, 0, ErrCannotFetchTeams
+	}
+
+	logrus.Infof("TeamService.GetAllTeams: fetched %d teams", len(teams))
+	return teams, total, nil
+}

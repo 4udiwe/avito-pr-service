@@ -15,4 +15,5 @@ type UserRepo interface {
 type TeamRepo interface {
 	Create(ctx context.Context, name string) (entity.Team, error)
 	GetByName(ctx context.Context, name string) (entity.Team, error)
+	GetAll(ctx context.Context, limit int, offset int) (teams []entity.Team, total int, err error)
 }

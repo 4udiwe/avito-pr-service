@@ -98,6 +98,36 @@ func (r *Repository) AssignReviewers(ctx context.Context, prID string, reviewerI
 	return nil
 }
 
+func (r *Repository) AssignReviewer(ctx context.Context, prID string, reviewerID string) error {
+	logrus.Infof("PRRepository.AssignReviewer: assigning reviewer %s to PR %s", reviewerID, prID)
+
+	query, args, _ := r.Builder.Insert("pr_reviewer").
+		Columns("pr_id", "reviewer_id").
+		Values(prID, reviewerID).
+		ToSql()
+
+	_, err := r.GetTxManager(ctx).Exec(ctx, query, args...)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case pgerrcode.UniqueViolation:
+				logrus.Warnf("PRRepository.AssignReviewer: reviewer already assigned to PR %s", prID)
+				return repository.ErrReviewerAlreadyAssigned
+			case pgerrcode.ForeignKeyViolation:
+				logrus.Warnf("PRRepository.AssignReviewer: reviewer not found for PR %s", prID)
+				return repository.ErrReviewerNotFound
+			}
+		}
+		logrus.Errorf("PRRepository.AssignReviewer: failed to assign reviewers to PR: %v", err)
+		return err
+	}
+
+	logrus.Infof("PRRepository.AssignReviewer: reviewers assigned to PR %s", prID)
+	return nil
+}
+
 func (r *Repository) ReassignReviewer(ctx context.Context, prID, oldReviewerID, newReviewerID string) error {
 	logrus.Infof("PRRepository.ReassignReviewer: reassigning reviewer for PR %s", prID)
 
@@ -189,6 +219,26 @@ func (r *Repository) UpdateStatus(ctx context.Context, ID string, statusID int, 
 	}
 
 	logrus.Infof("PRRepository.UpdateStatus: status updated for PR %s", ID)
+	return nil
+}
+
+func (r *Repository) UpdateNeedMoreReviewers(ctx context.Context, ID string) error {
+	logrus.Infof("PRRepository.UpdateNeedMoreReviewers: updating flag for PR %s", ID)
+
+	query, args, _ := r.Builder.Update("pr").Set("need_more_reviewers", false).Where("id = ?", ID).ToSql()
+
+	cmdTag, err := r.GetTxManager(ctx).Exec(ctx, query, args...)
+
+	if err != nil {
+		logrus.Errorf("PRRepository.UpdateNeedMoreReviewers: failed to update flag for PR %s: %v", ID, err)
+		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		logrus.Warnf("PRRepository.UpdateNeedMoreReviewers: no PR with ID %s to update", ID)
+		return repository.ErrPRNotFound
+	}
+
+	logrus.Infof("PRRepository.UpdateNeedMoreReviewers: flag updated for PR %s", ID)
 	return nil
 }
 
@@ -327,4 +377,76 @@ func (r *Repository) GetStatusByStatusID(ctx context.Context, statusID int) (ent
 	}
 	logrus.Infof("PRRepository.GetStatusByStatusID: PR status found with ID %d", statusID)
 	return rowStatus.ToEntity(), nil
+}
+
+func (r *Repository) GetAll(
+	ctx context.Context,
+	limit int,
+	offset int,
+) (PRs []entity.PullRequest, total int, err error) {
+
+	logrus.Info("PRRepository.GetAll called")
+	query, args, _ := r.Builder.
+		Select(
+			"p.id",
+			"p.title",
+			"p.author_id",
+			"p.status_id",
+			"s.name AS status_name",
+			"p.need_more_reviewers",
+			"p.created_at",
+			"p.merged_at",
+			"COALESCE(array_agg(r.reviewer_id) FILTER (WHERE r.reviewer_id IS NOT NULL), '{}') AS reviewer_ids",
+		).
+		From("pr AS p").
+		LeftJoin("pr_reviewer AS r ON p.id = r.pr_id").
+		LeftJoin("pr_status AS s ON p.status_id = s.id").
+		GroupBy("p.id", "s.name").
+		// sort by STATUS then CREATED AT
+		OrderBy("p.status_id ASC", "p.created_at DESC").
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
+		ToSql()
+
+	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
+	if err != nil {
+		logrus.Error("PRRepository.GetAll error: ", err)
+		return nil, 0, repository.ErrCannotFetchPRs
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row RowPullRequestWithReviewerIDs
+
+		if err := rows.Scan(
+			&row.ID,
+			&row.Title,
+			&row.AuthorID,
+			&row.StatusID,
+			&row.StatusName,
+			&row.NeedMoreReviewers,
+			&row.CreatedAt,
+			&row.MergedAt,
+			&row.ReviewerIDs,
+		); err != nil {
+			logrus.Error("PRRepository.GetAll scan error: ", err)
+			return nil, 0, repository.ErrCannotFetchPRs
+		}
+
+		PRs = append(PRs, row.ToEntity())
+	}
+
+	// Get total count
+	countQuery, countArgs, _ := r.Builder.
+		Select("COUNT(*)").
+		From("pr").
+		ToSql()
+
+	if err := r.GetTxManager(ctx).QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		logrus.Error("PRRepository.GetAll - failed to get total count: ", err)
+		return nil, 0, repository.ErrCannotFetchPRs
+	}
+
+	logrus.Infof("PRRepository.GetAll success: count=%d", len(PRs))
+	return PRs, total, nil
 }

@@ -84,3 +84,59 @@ func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, e
 	logrus.Infof("TeamRepository.GetByName: team found with ID %s", rowTeam.ID)
 	return rowTeam.ToEntity(), nil
 }
+
+func (r *Repository) GetAllTeams(
+	ctx context.Context,
+	limit int,
+	offset int,
+) (teams []entity.Team, total int, err error) {
+	logrus.Info("TeamRepository.GetAll called")
+
+	query, args, _ := r.Builder.
+		Select(
+			"id",
+			"name",
+			"created_at",
+		).
+		From("team").
+		OrderBy("created_at DESC").
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
+		ToSql()
+
+	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
+	if err != nil {
+		logrus.Error("TeamRepository.GetAll error: ", err)
+		return nil, 0, repository.ErrCannotFetchTeams
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var t entity.Team
+
+		if err := rows.Scan(
+			&t.ID,
+			&t.Name,
+			&t.CreatedAt,
+		); err != nil {
+			logrus.Error("TeamRepository.GetAll scan error: ", err)
+			return nil, 0, repository.ErrCannotFetchTeams
+		}
+
+		teams = append(teams, t)
+	}
+
+	// Get total count
+	countQuery, countArgs, _ := r.Builder.
+		Select("COUNT(*)").
+		From("team").
+		ToSql()
+
+	if err := r.GetTxManager(ctx).QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+		logrus.Error("TeamRepository.GetAll - failed to get total count: ", err)
+		return nil, 0, repository.ErrCannotFetchTeams
+	}
+
+	logrus.Infof("TeamRepository.GetAll success: count=%d", len(teams))
+	return teams, total, nil
+}
