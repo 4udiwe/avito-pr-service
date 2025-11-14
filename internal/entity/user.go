@@ -2,14 +2,12 @@ package entity
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type User struct {
 	ID        string
 	Name      string
 	IsActive  bool
-	TeamID    uuid.UUID
+	Team      Team
 	CreatedAt time.Time
 }

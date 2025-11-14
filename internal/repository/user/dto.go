@@ -11,6 +11,7 @@ type RowUser struct {
 	ID        string    `db:"id"`
 	Name      string    `db:"name"`
 	TeamID    uuid.UUID `db:"team_id"`
+	TeamName  string
 	IsActive  bool      `db:"is_active"`
 	CreatedAt time.Time `db:"created_at"`
 }
@@ -19,7 +20,7 @@ func (ru *RowUser) ToEntity() entity.User {
 	return entity.User{
 		ID:        ru.ID,
 		Name:      ru.Name,
-		TeamID:    ru.TeamID,
+		Team:      entity.Team{ID: ru.TeamID, Name: ru.TeamName},
 		IsActive:  ru.IsActive,
 		CreatedAt: ru.CreatedAt,
 	}

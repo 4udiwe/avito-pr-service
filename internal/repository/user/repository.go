@@ -62,19 +62,28 @@ func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UU
 func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error) {
 	logrus.Infof("UserRepository.GetByID: getting user by ID %s", ID)
 
-	query, args, _ := r.Builder.Select("id", "name", "is_active", "team_id", "created_at").
-		From("users").
-		Where("id = ?", ID).
+	query, args, _ := r.Builder.
+		Select(
+			"u.id",
+			"u.name",
+			"u.is_active",
+			"u.team_id",
+			"t.name AS team_name",
+			"u.created_at",
+		).
+		From("users AS u").
+		LeftJoin("team AS t ON u.team_id = t.id").
+		Where("u.id = ?", ID).
 		ToSql()
 
-	rowUser := RowUser{}
-
+	var row RowUser
 	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&rowUser.ID,
-		&rowUser.Name,
-		&rowUser.IsActive,
-		&rowUser.TeamID,
-		&rowUser.CreatedAt,
+		&row.ID,
+		&row.Name,
+		&row.IsActive,
+		&row.TeamID,
+		&row.TeamName,
+		&row.CreatedAt,
 	)
 
 	if err != nil {
@@ -86,8 +95,8 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error
 		return entity.User{}, err
 	}
 
-	logrus.Infof("UserRepository.GetByID: user found with ID %s", rowUser.ID)
-	return rowUser.ToEntity(), nil
+	logrus.Infof("UserRepository.GetByID: user found with ID %s", row.ID)
+	return row.ToEntity(), nil
 }
 
 func (r *Repository) GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entity.User, error) {

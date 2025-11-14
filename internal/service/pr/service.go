@@ -62,7 +62,7 @@ func (s *Service) CreatePR(ctx context.Context, pullRequestID, title, authorID s
 		}
 
 		// Get 2 random author`s teammates
-		candidates, err := s.UserRepo.GetRandomActiveTeammates(ctx, author.TeamID, author.ID, ReviewerCount)
+		candidates, err := s.UserRepo.GetRandomActiveTeammates(ctx, author.Team.ID, author.ID, ReviewerCount)
 		if err != nil {
 			logrus.Errorf("PRService.CreatePR: failed to get teammates for author ID %s: %v", author.ID, err)
 			return err
@@ -99,11 +99,12 @@ func (s *Service) CreatePR(ctx context.Context, pullRequestID, title, authorID s
 	return pullRequest, nil
 }
 
-func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID, newReviewerID string) (entity.PullRequest, error) {
+func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID string) (entity.PullRequest, string, error) {
 	logrus.Infof("PRService.ReassignReviewer: reassigning reviewer for PR %s", prID)
 
 	var pullRequest entity.PullRequest
 	var reviewers []entity.PRReviewer
+	var newReviewer entity.User
 
 	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
 		// Check if PR exists
@@ -120,48 +121,71 @@ func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID, new
 		pullRequest = pr
 
 		// Check status of the PR
-		pullRequest.Status, err = s.PRRepo.GetStatusByStatusID(ctx, pullRequest.Status.ID)
-		if err != nil {
-			if errors.Is(err, repository.ErrStatusNotFound) {
-				logrus.Warnf("PRService.ReassignReviewer: status with ID %d not found for PR %s", pullRequest.Status.ID, prID)
-				return ErrStatusNotFound
-			}
-			logrus.Errorf("PRService.ReassignReviewer: failed to get status with ID %d for PR %s: %v", pullRequest.Status.ID, prID, err)
-			return err
-		}
-
 		if pullRequest.Status.Name == entity.StatusMERGED {
 			logrus.Warnf("PRService.ReassignReviewer: cannot reassign reviewer for merged PR %s", prID)
 			return ErrCannotReassignReviewerForMergedPR
 		}
 
-		// Reassign reviewer
-		err = s.PRRepo.ReassignReviewer(ctx, prID, oldReviewerID, newReviewerID)
+		// Get old reviewer with team
+		oldReviewer, err := s.UserRepo.GetByID(ctx, oldReviewerID)
+		if err != nil {
+			if errors.Is(err, repository.ErrUserNotFound) {
+				logrus.Warnf("PRService.ReassignReviewer: Old reviewer with ID %s not found", oldReviewerID)
+			}
+			return ErrReviewerNotFound
+		}
+
+		// Get random teammate (limit = 1) not the old reviewer
+		reviewers, err := s.UserRepo.GetRandomActiveTeammates(ctx, oldReviewer.Team.ID, oldReviewerID, 1)
 		if err != nil {
 			return err
 		}
+		if len(reviewers) == 0 {
+			return ErrNoMoreReviewersToReassign
+		}
+		newReviewer = reviewers[0]
 
-		// Get updated list of reviewers
-		reviewers, err = s.PRRepo.GetReviewersByPR(ctx, prID)
-		return err
+		// Reassign reviewer
+		return s.PRRepo.ReassignReviewer(ctx, prID, oldReviewerID, newReviewer.ID)
 	})
 
 	if err != nil {
 		if errors.Is(err, repository.ErrReviewerNotFound) {
 			logrus.Warnf("PRService.ReassignReviewer: reviewer not found for PR %s", prID)
-			return entity.PullRequest{}, ErrReviewerNotFound
+			return entity.PullRequest{}, "", ErrReviewerNotFound
 		}
+	}
+
+	// Get updated list of reviewers
+	reviewers, err = s.PRRepo.GetReviewersByPR(ctx, prID)
+	if err != nil {
+		return entity.PullRequest{}, "", ErrReviewerNotFound
 	}
 
 	pullRequest.Reviewers = lo.Map(reviewers, func(r entity.PRReviewer, _ int) string { return r.ID })
 
-	return pullRequest, nil
+	return pullRequest, newReviewer.ID, nil
 }
 
 func (s *Service) MergePR(ctx context.Context, prID string) (entity.PullRequest, error) {
 	logrus.Infof("PRService.MergePR: merging PR %s", prID)
 
 	var pullRequest entity.PullRequest
+
+	// Check if PR is already MERGED
+	pullRequest, err := s.PRRepo.GetByID(ctx, prID)
+	if err != nil {
+		if errors.Is(err, repository.ErrPRNotFound) {
+			logrus.Warnf("PRService.MergePR: PR with ID %s not found", prID)
+			return entity.PullRequest{}, ErrPRNotFound
+		}
+		logrus.Errorf("PRService.MergePR: failed to PR %s: %v", prID, err)
+		return entity.PullRequest{}, ErrCannotMergePR
+	}
+
+	if pullRequest.Status.Name == entity.StatusMERGED {
+		return pullRequest, nil
+	}
 
 	// Get ID of MERGED status
 	statuses, err := s.PRRepo.GetPRStatuses(ctx)
@@ -178,23 +202,19 @@ func (s *Service) MergePR(ctx context.Context, prID string) (entity.PullRequest,
 		}
 	}
 
-	err = s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
-		// Update PR status to MERGED
-		err = s.PRRepo.UpdateStatus(ctx, prID, mergedStatusID, time.Now())
-		if err != nil {
-			if errors.Is(err, repository.ErrPRNotFound) {
-				logrus.Warnf("PRService.MergePR: PR with ID %s not found", prID)
-				return ErrPRNotFound
-			}
-			logrus.Errorf("PRService.MergePR: failed to update status for PR %s: %v", prID, err)
-			return err
+	// Update PR status to MERGED
+	err = s.PRRepo.UpdateStatus(ctx, prID, mergedStatusID, time.Now())
+	if err != nil {
+		if errors.Is(err, repository.ErrPRNotFound) {
+			logrus.Warnf("PRService.MergePR: PR with ID %s not found", prID)
+			return entity.PullRequest{}, ErrPRNotFound
 		}
+		logrus.Errorf("PRService.MergePR: failed to update status for PR %s: %v", prID, err)
+		return entity.PullRequest{}, ErrCannotCreatePR
+	}
 
-		// Get updated PR with reviewers
-		pullRequest, err = s.PRRepo.GetByID(ctx, prID)
-		return err
-	})
-
+	// Get updated PR with reviewers
+	pullRequest, err = s.PRRepo.GetByID(ctx, prID)
 	if err != nil {
 		logrus.Errorf("PRService.MergePR: failed to merge PR %s: %v", prID, err)
 		return entity.PullRequest{}, ErrCannotMergePR

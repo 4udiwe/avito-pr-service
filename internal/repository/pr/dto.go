@@ -1,6 +1,8 @@
 package repo_pr
 
 import (
+	"time"
+
 	"github.com/4udiwe/avito-pr-service/internal/entity"
 )
 
@@ -14,9 +16,10 @@ type RowPullRequest struct {
 	Title             string `db:"title"`
 	AuthorID          string `db:"author_id"`
 	StatusID          int    `db:"status_id"`
-	NeedMoreReviewers bool   `db:"need_more_reviewers"`
-	CreatedAt         string `db:"created_at"`
-	MergedAt          string `db:"merged_at"`
+	StatusName        string
+	NeedMoreReviewers bool      `db:"need_more_reviewers"`
+	CreatedAt         time.Time `db:"created_at"`
+	MergedAt          time.Time `db:"merged_at"`
 }
 
 type RowPullRequestWithReviewerIDs struct {
@@ -43,7 +46,7 @@ func (r *RowPullRequest) ToEntity() entity.PullRequest {
 		ID:                r.ID,
 		Title:             r.Title,
 		AuthorID:          r.AuthorID,
-		Status:            entity.Status{ID: r.StatusID},
+		Status:            entity.Status{ID: r.StatusID, Name: entity.PRStatusName(r.StatusName)},
 		NeedMoreReviewers: r.NeedMoreReviewers,
 		CreatedAt:         r.CreatedAt,
 		MergedAt:          r.MergedAt,
@@ -55,7 +58,7 @@ func (r *RowPullRequestWithReviewerIDs) ToEntity() entity.PullRequest {
 		ID:                r.ID,
 		Title:             r.Title,
 		AuthorID:          r.AuthorID,
-		Status:            entity.Status{ID: r.StatusID},
+		Status:            entity.Status{ID: r.StatusID, Name: entity.PRStatusName(r.StatusName)},
 		NeedMoreReviewers: r.NeedMoreReviewers,
 		CreatedAt:         r.CreatedAt,
 		MergedAt:          r.MergedAt,

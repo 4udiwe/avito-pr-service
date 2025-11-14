@@ -133,6 +133,7 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest
 			"p.title",
 			"p.author_id",
 			"p.status_id",
+			"s.name AS status_name",
 			"p.need_more_reviewers",
 			"p.created_at",
 			"p.merged_at",
@@ -140,8 +141,9 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest
 		).
 		From("pr AS p").
 		LeftJoin("pr_reviewer AS r ON p.id = r.pr_id").
+		LeftJoin("pr_status AS s ON p.status_id = s.id").
 		Where("p.id = ?", ID).
-		GroupBy("p.id").
+		GroupBy("p.id, s.name").
 		ToSql()
 
 	var row RowPullRequestWithReviewerIDs
@@ -150,6 +152,7 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest
 		&row.Title,
 		&row.AuthorID,
 		&row.StatusID,
+		&row.StatusName,
 		&row.NeedMoreReviewers,
 		&row.CreatedAt,
 		&row.MergedAt,
@@ -165,7 +168,7 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.PullRequest
 		return entity.PullRequest{}, err
 	}
 
-	logrus.Infof("PRRepository.GetByID: PR found with ID %s", ID)
+	logrus.Infof("PRRepository.GetByID: PR found with ID %s", row.ID)
 	return row.ToEntity(), nil
 }
 
@@ -223,10 +226,20 @@ func (r *Repository) GetReviewersByPR(ctx context.Context, prID string) ([]entit
 }
 
 func (r *Repository) ListByReviewer(ctx context.Context, reviewerID string) ([]entity.PullRequest, error) {
-	query, args, _ := r.Builder.Select(
-		"p.id", "p.title", "p.author_id", "p.status_id", "p.need_more_reviewers", "p.created_at", "p.merged_at",
-	).From("pr AS p").
+	query, args, _ := r.Builder.
+		Select(
+			"p.id",
+			"p.title",
+			"p.author_id",
+			"p.status_id",
+			"s.name AS status_name",
+			"p.need_more_reviewers",
+			"p.created_at",
+			"p.merged_at",
+		).
+		From("pr AS p").
 		Join("pr_reviewer AS r ON p.id = r.pr_id").
+		LeftJoin("pr_status AS s ON p.status_id = s.id").
 		Where("r.reviewer_id = ?", reviewerID).
 		ToSql()
 
@@ -238,16 +251,24 @@ func (r *Repository) ListByReviewer(ctx context.Context, reviewerID string) ([]e
 	defer rows.Close()
 
 	var PRs []entity.PullRequest
+
 	for rows.Next() {
-		var rowPR RowPullRequest
+		var row RowPullRequest
 		if err := rows.Scan(
-			&rowPR.ID, &rowPR.Title, &rowPR.AuthorID, &rowPR.StatusID,
-			&rowPR.NeedMoreReviewers, &rowPR.CreatedAt, &rowPR.MergedAt,
+			&row.ID,
+			&row.Title,
+			&row.AuthorID,
+			&row.StatusID,
+			&row.StatusName,
+			&row.NeedMoreReviewers,
+			&row.CreatedAt,
+			&row.MergedAt,
 		); err != nil {
-			logrus.Errorf("PRRepository.ListByReviewer: failed to scan PR for reviewer %s: %v", reviewerID, err)
+			logrus.Errorf("PRRepository.ListByReviewer: failed to scan row for reviewer %s: %v", reviewerID, err)
 			return nil, err
 		}
-		PRs = append(PRs, rowPR.ToEntity())
+
+		PRs = append(PRs, row.ToEntity())
 	}
 
 	logrus.Infof("PRRepository.ListByReviewer: PRs found for reviewer %s", reviewerID)

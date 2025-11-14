@@ -12,4 +12,5 @@ var (
 	ErrCannotReassignReviewerForMergedPR = errors.New("cannot reassign reviewer for merged PR")
 	ErrCannotMergePR                     = errors.New("cannot merge PR")
 	ErrStatusNotFound                    = errors.New("status not found")
+	ErrNoMoreReviewersToReassign         = errors.New("no more reviewers to reassign")
 )

@@ -1,5 +1,7 @@
 package entity
 
+import "time"
+
 type PRStatusName string
 
 const (
@@ -18,8 +20,8 @@ type PullRequest struct {
 	AuthorID          string
 	Status            Status
 	NeedMoreReviewers bool
-	CreatedAt         string
-	MergedAt          string
+	CreatedAt         time.Time
+	MergedAt          time.Time
 	Reviewers         []string
 }
 
