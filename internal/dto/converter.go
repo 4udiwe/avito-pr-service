@@ -49,5 +49,5 @@ func (pr *PullRequest) FillFromEntity(e entity.PullRequest) {
 	pr.Status = PullRequestStatus(e.Status.Name)
 	pr.AssignedReviewers = e.Reviewers
 	pr.CreatedAt = &e.CreatedAt
-	pr.MergedAt = &e.MergedAt
+	pr.MergedAt = e.MergedAt
 }

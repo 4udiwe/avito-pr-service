@@ -21,7 +21,7 @@ type PullRequest struct {
 	Status            Status
 	NeedMoreReviewers bool
 	CreatedAt         time.Time
-	MergedAt          time.Time
+	MergedAt          *time.Time
 	Reviewers         []string
 }
 
@@ -29,5 +29,5 @@ type PRReviewer struct {
 	ID         string
 	PRID       string
 	ReviewerID string
-	AssignedAt string
+	AssignedAt time.Time
 }

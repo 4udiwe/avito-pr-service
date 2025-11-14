@@ -15,7 +15,7 @@ CREATE TABLE team (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE user (
+CREATE TABLE app_user (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -26,7 +26,7 @@ CREATE TABLE user (
 CREATE TABLE pr (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    author_id TEXT NOT NULL REFERENCES user(id) ON DELETE RESTRICT,
+    author_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT,
     status_id INT NOT NULL REFERENCES pr_status(id) DEFAULT 0,
     need_more_reviewers BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT now(),
@@ -36,12 +36,12 @@ CREATE TABLE pr (
 CREATE TABLE pr_reviewer (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pr_id TEXT NOT NULL REFERENCES pr(id) ON DELETE CASCADE,
-    reviewer_id TEXT NOT NULL REFERENCES user(id) ON DELETE RESTRICT,
+    reviewer_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE RESTRICT,
     assigned_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (pr_id, reviewer_id)
 );
 
-CREATE INDEX idx_user_team_id ON user(team_id);
+CREATE INDEX idx_user_team_id ON app_user(team_id);
 CREATE INDEX idx_pr_author_id ON pr(author_id);
 CREATE INDEX idx_pr_reviewer_pr_id ON pr_reviewer(pr_id);
 CREATE INDEX idx_pr_reviewer_reviewer_id ON pr_reviewer(reviewer_id);
@@ -56,7 +56,7 @@ DROP INDEX IF EXISTS idx_user_team_id;
 
 DROP TABLE IF EXISTS pr_reviewer;
 DROP TABLE IF EXISTS pr;
-DROP TABLE IF EXISTS user;
+DROP TABLE IF EXISTS app_user;
 DROP TABLE IF EXISTS team;
 DROP TABLE IF EXISTS pr_status;
 -- +goose StatementEnd

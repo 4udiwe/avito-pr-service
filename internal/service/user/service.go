@@ -62,23 +62,20 @@ func (s *Service) GetUserReviews(ctx context.Context, userID string) ([]entity.P
 		// Check if user exists
 		_, err := s.userRepo.GetByID(ctx, userID)
 		if err != nil {
-			if errors.Is(err, repository.ErrUserNotFound) {
-				logrus.Warnf("UserService.GetUserReviews: user %s not found", userID)
-				return ErrUserNotFound
-			}
-			logrus.Errorf("UserService.GetUserReviews: failed to get user %s: %v", userID, err)
+			logrus.Warnf("UserService.GetUserReviews: user %s not found", userID)
 			return err
 		}
 
 		// Fetch PRs assigned to the user as a reviewer
 		prs, err = s.PRRepo.ListByReviewer(ctx, userID)
-		if err != nil {
-			logrus.Errorf("UserService.GetUserReviews: failed to list PRs for reviewer %s: %v", userID, err)
-		}
 		return err
 	})
 
 	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, ErrUserNotFound
+		}
+		logrus.Errorf("UserService.GetUserReviews: failed to list PRs for reviewer %s: %v", userID, err)
 		return nil, ErrCannotGetUserReviews
 	}
 

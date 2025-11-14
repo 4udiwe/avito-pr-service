@@ -17,9 +17,9 @@ type RowPullRequest struct {
 	AuthorID          string `db:"author_id"`
 	StatusID          int    `db:"status_id"`
 	StatusName        string
-	NeedMoreReviewers bool      `db:"need_more_reviewers"`
-	CreatedAt         time.Time `db:"created_at"`
-	MergedAt          time.Time `db:"merged_at"`
+	NeedMoreReviewers bool       `db:"need_more_reviewers"`
+	CreatedAt         time.Time  `db:"created_at"`
+	MergedAt          *time.Time `db:"merged_at"`
 }
 
 type RowPullRequestWithReviewerIDs struct {
@@ -28,10 +28,10 @@ type RowPullRequestWithReviewerIDs struct {
 }
 
 type RowPRReviewer struct {
-	ID         string `db:"id"`
-	PRID       string `db:"pr_id"`
-	ReviewerID string `db:"reviewer_id"`
-	AssignedAt string `db:"assigned_at"`
+	ID         string    `db:"id"`
+	PRID       string    `db:"pr_id"`
+	ReviewerID string    `db:"reviewer_id"`
+	AssignedAt time.Time `db:"assigned_at"`
 }
 
 func (r *RowStatus) ToEntity() entity.Status {

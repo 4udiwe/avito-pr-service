@@ -22,7 +22,7 @@ func New(userService UserService) api.Handler {
 }
 
 type Request struct {
-	UserID string `param:"user_id" validate:"required"`
+	UserID string `query:"user_id" validate:"required"`
 }
 
 type Response struct {

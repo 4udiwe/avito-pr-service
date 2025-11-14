@@ -3,6 +3,7 @@ package get_prs
 import (
 	"math"
 	"net/http"
+	"time"
 
 	api "github.com/4udiwe/avito-pr-service/internal/api/http"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/decorator"
@@ -28,12 +29,24 @@ type GetAllPRsRequest struct {
 	PageSize int `query:"page_size"`
 }
 
+type PullRequest struct {
+	AssignedReviewers []string              `json:"assigned_reviewers"`
+	AuthorId          string                `json:"author_id"`
+	CreatedAt         *time.Time            `json:"createdAt"`
+	MergedAt          *time.Time            `json:"mergedAt"`
+	PullRequestId     string                `json:"pull_request_id"`
+	PullRequestName   string                `json:"pull_request_name"`
+	Status            dto.PullRequestStatus `json:"status"`
+	// custom field
+	NeedMoreReviewers bool `json:"need_more_reviewers"`
+}
+
 type GetAllPRsResponse struct {
-	PRs        []dto.PullRequest `json:"pull_requests"`
-	Page       int               `json:"page"`
-	PageSize   int               `json:"page_size"`
-	TotalItems int               `json:"total_items"`
-	TotalPages int               `json:"total_pages"`
+	PRs        []PullRequest `json:"pull_requests"`
+	Page       int           `json:"page"`
+	PageSize   int           `json:"page_size"`
+	TotalItems int           `json:"total_items"`
+	TotalPages int           `json:"total_pages"`
 }
 
 func (h *handler) Handle(ctx echo.Context, in GetAllPRsRequest) error {
@@ -58,10 +71,17 @@ func (h *handler) Handle(ctx echo.Context, in GetAllPRsRequest) error {
 	totalPages := int(math.Ceil(float64(totalCount) / float64(in.PageSize)))
 
 	return ctx.JSON(http.StatusOK, GetAllPRsResponse{
-		PRs: lo.Map(PRs, func(e entity.PullRequest, _ int) dto.PullRequest {
-			pr := dto.PullRequest{}
-			pr.FillFromEntity(e)
-			return pr
+		PRs: lo.Map(PRs, func(e entity.PullRequest, _ int) PullRequest {
+			return PullRequest{
+				AssignedReviewers: e.Reviewers,
+				AuthorId:          e.AuthorID,
+				CreatedAt:         &e.CreatedAt,
+				MergedAt:          e.MergedAt,
+				PullRequestId:     e.ID,
+				PullRequestName:   e.Title,
+				Status:            dto.PullRequestStatus(e.Status.Name),
+				NeedMoreReviewers: e.NeedMoreReviewers,
+			}
 		}),
 		Page:       in.Page,
 		PageSize:   in.PageSize,

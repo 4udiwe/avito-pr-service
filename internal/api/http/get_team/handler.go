@@ -20,7 +20,7 @@ func New(teamService TeamService) api.Handler {
 }
 
 type Request struct {
-	TeamName string `param:"team_name" validate:"required"`
+	TeamName string `query:"team_name" validate:"required"`
 }
 
 func (h *handler) Handle(ctx echo.Context, in Request) error {

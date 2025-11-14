@@ -85,7 +85,7 @@ func (r *Repository) GetByName(ctx context.Context, name string) (entity.Team, e
 	return rowTeam.ToEntity(), nil
 }
 
-func (r *Repository) GetAllTeams(
+func (r *Repository) GetAll(
 	ctx context.Context,
 	limit int,
 	offset int,

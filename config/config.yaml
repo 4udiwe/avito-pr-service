@@ -1,0 +1,13 @@
+app:
+  name: "avito-pr-service"
+  version: "1.0.0"
+
+http:
+  port: "8080"
+
+logger:
+  level: "debug"
+
+postgres:
+  connect_timeout: 2s
+
