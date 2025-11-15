@@ -10,7 +10,7 @@ func (app *App) TeamService() *team.Service {
 	if app.teamService != nil {
 		return app.teamService
 	}
-	app.teamService = team.New(app.UserRepo(), app.TeamRepo(), app.Postgres())
+	app.teamService = team.New(app.UserRepo(), app.TeamRepo(), app.PRRepo(), app.Postgres())
 	return app.teamService
 }
 

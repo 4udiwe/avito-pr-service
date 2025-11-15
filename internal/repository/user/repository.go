@@ -102,8 +102,9 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error
 func (r *Repository) GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entity.User, error) {
 	logrus.Infof("UserRepository.GetByTeamID: getting users by team ID %s", teamID)
 
-	query, args, _ := r.Builder.Select("id", "name", "is_active", "team_id", "created_at").
-		From("app_user").
+	query, args, _ := r.Builder.Select("u.id", "u.name", "u.is_active", "u.team_id", "t.name AS team_name", "u.created_at").
+		From("app_user AS u").
+		Join("team AS t ON u.team_id = t.id").
 		Where("team_id = ?", teamID).
 		ToSql()
 
@@ -164,14 +165,16 @@ func (r *Repository) SetActiveStatus(ctx context.Context, userID string, isActiv
 	return nil
 }
 
+// Used for assigning reviewers on a new PR, or reassigning one reviewer to another teammate
 func (r *Repository) GetRandomActiveTeammates(ctx context.Context, teamID uuid.UUID, limit int, excludeIDs ...string) ([]entity.User, error) {
 	logrus.Infof("UserRepository.GetRandomActiveTeammates: getting up to %d random active teammates for team ID %s", limit, teamID)
 
 	query, args, _ := r.Builder.
-		Select("id", "name", "team_id", "created_at").
-		From("app_user").
-		Where("team_id = ? AND is_active = TRUE", teamID).
-		Where(squirrel.NotEq{"id": excludeIDs}).
+		Select("u.id", "u.name", "u.team_id", "t.name AS team_name", "u.is_active", "u.created_at").
+		From("app_user AS u").
+		Join("team AS t ON u.team_id = t.id").
+		Where("u.team_id = ? AND is_active = TRUE", teamID).
+		Where(squirrel.NotEq{"u.id": excludeIDs}).
 		OrderBy("RANDOM()").
 		Limit(uint64(limit)).
 		ToSql()
@@ -192,5 +195,44 @@ func (r *Repository) GetRandomActiveTeammates(ctx context.Context, teamID uuid.U
 	users := lo.Map(rowsUsers, func(r RowUser, _ int) entity.User { return r.ToEntity() })
 
 	logrus.Infof("UserRepository.GetRandomActiveTeammates: found %d random active teammates", len(users))
+	return users, nil
+}
+
+// Used for team deactivation method to search new random reviewrs from other teams
+func (r *Repository) GetRandomActiveUsers(
+	ctx context.Context,
+	limit int,
+	excludeIDs ...string,
+) ([]entity.User, error) {
+	logrus.Infof("UserRepository.GetRandomActiveUsers: getting %d random active users, excluding %+v", limit, excludeIDs)
+
+	builder := r.Builder.
+		Select("u.id", "u.name", "u.team_id", "t.name AS team_name", "u.is_active", "u.created_at").
+		From("app_user AS u").
+		Join("team AS t ON u.team_id = t.id").
+		Where("is_active = TRUE")
+
+	if len(excludeIDs) > 0 {
+		builder = builder.Where(squirrel.NotEq{"u.id": excludeIDs})
+	}
+
+	builder = builder.OrderBy("RANDOM()").Limit(uint64(limit))
+
+	query, args, _ := builder.ToSql()
+
+	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
+	if err != nil {
+		logrus.Errorf("GetRandomActiveUsers: query failed: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	rowsUsers, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowUser])
+	if err != nil {
+		logrus.Errorf("GetRandomActiveUsers: scan failed: %v", err)
+		return nil, err
+	}
+
+	users := lo.Map(rowsUsers, func(r RowUser, _ int) entity.User { return r.ToEntity() })
 	return users, nil
 }

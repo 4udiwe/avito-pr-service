@@ -27,6 +27,7 @@ func (app *App) configureRouter(handler *echo.Echo) {
 		teamGroup.POST("/add", app.PostTeamHandler().Handle)
 		teamGroup.GET("/get", app.GetTeamHandler().Handle)
 		teamGroup.GET("", app.GetTeamsHandler().Handle)
+		teamGroup.POST("/deactivate", app.PostDeactivateTeamHandler().Handle)
 	}
 
 	userGroup := handler.Group("users")

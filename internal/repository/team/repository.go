@@ -6,6 +6,7 @@ import (
 
 	"github.com/4udiwe/avito-pr-service/internal/entity"
 	"github.com/4udiwe/avito-pr-service/internal/repository"
+	repo_user "github.com/4udiwe/avito-pr-service/internal/repository/user"
 	"github.com/4udiwe/avito-pr-service/pkg/postgres"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -133,4 +134,47 @@ func (r *Repository) GetAll(
 
 	logrus.Infof("TeamRepository.GetAll success: count=%d", len(teams))
 	return teams, total, nil
+}
+
+func (r *Repository) DeactivateTeamMembers(ctx context.Context, teamName string) ([]entity.User, error) {
+	logrus.Infof("UserRepository.DeactivateTeamMembers: deactivating users of team %s", teamName)
+
+	query := `
+		WITH updated_users AS (
+			UPDATE app_user AS u
+			SET is_active = FALSE
+			FROM team AS t
+			WHERE u.team_id = t.id
+				AND t.name = $1
+				AND u.is_active = TRUE
+			RETURNING u.id, u.name, u.team_id, u.is_active, u.created_at
+		)
+		SELECT 
+			u.id, 
+			u.name, 
+			u.team_id, 
+			t.name AS team_name, 
+			u.is_active, 
+			u.created_at
+		FROM updated_users u
+		JOIN team t ON u.team_id = t.id;
+	`
+
+	rows, err := r.GetTxManager(ctx).Query(ctx, query, teamName)
+	if err != nil {
+		logrus.Errorf("UserRepository.DeactivateTeamMembers: query failed: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	rowsUsers, err := pgx.CollectRows(rows, pgx.RowToStructByName[repo_user.RowUser])
+	if err != nil {
+		logrus.Errorf("UserRepository.DeactivateTeamMembers: failed to scan user row: %v", err)
+		return nil, err
+	}
+
+	users := lo.Map(rowsUsers, func(r repo_user.RowUser, _ int) entity.User { return r.ToEntity() })
+
+	logrus.Infof("UserRepository.DeactivateTeamMembers: deactivated %d users", len(users))
+	return users, nil
 }

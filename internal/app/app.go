@@ -47,6 +47,7 @@ type App struct {
 	postReassignReviewerHandler api.Handler
 	postTeamHandler             api.Handler
 	postIsUserActiveHandler     api.Handler
+	postDeactivateTeamHandler   api.Handler
 
 	// Services
 	userService *user.Service

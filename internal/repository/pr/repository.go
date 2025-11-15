@@ -44,7 +44,7 @@ func (r *Repository) Create(ctx context.Context, ID, title, authorID, statusName
 		AuthorID:          authorID,
 		NeedMoreReviewers: needMoreReviewers,
 	}
-	err := r.GetTxManager(ctx).QueryRow(ctx, query, ID, title, authorID, statusName, needMoreReviewers).Scan(
+	err := r.GetTxManager(ctx).QueryRow(ctx, query, ID, title, authorID, needMoreReviewers, statusName).Scan(
 		&row.StatusID,
 		&row.StatusName,
 		&row.CreatedAt,

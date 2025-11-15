@@ -7,6 +7,7 @@ import (
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_teams"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_user_reviews"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/post_assign"
+	"github.com/4udiwe/avito-pr-service/internal/api/http/post_deactivate_team"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/post_merge"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/post_pr"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/post_reassign"
@@ -92,4 +93,12 @@ func (app *App) PostIsUserActiveHandler() api.Handler {
 	}
 	app.postIsUserActiveHandler = post_user_is_active.New(app.UserService())
 	return app.postIsUserActiveHandler
+}
+
+func (app *App) PostDeactivateTeamHandler() api.Handler {
+	if app.postDeactivateTeamHandler != nil {
+		return app.postDeactivateTeamHandler
+	}
+	app.postDeactivateTeamHandler = post_deactivate_team.New(app.TeamService())
+	return app.postDeactivateTeamHandler
 }

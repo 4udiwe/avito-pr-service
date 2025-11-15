@@ -15,6 +15,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/avito-pr ./cmd/main.g
 FROM alpine:3.22
 COPY --from=builder /app/config /config
 COPY --from=builder /app/avito-pr /app/avito-pr
+COPY --from=builder /app/internal/database/migrations /app/database/migrations
 
 WORKDIR /app
 EXPOSE 8080
