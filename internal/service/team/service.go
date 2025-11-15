@@ -30,39 +30,34 @@ func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, user
 	var team entity.Team
 
 	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		// Create a team
 		newTeam, err := s.TeamRepo.Create(ctx, teamName)
-
 		if err != nil {
-			if errors.Is(err, repository.ErrTeamAlreadyExists) {
-				logrus.Warnf("TeamService.CreateTeamWithUsers: team %s already exists", teamName)
-				return ErrTeamAlreadyExists
-			}
-			logrus.Errorf("TeamService.CreateTeamWithUsers: failed to create team %s: %v", teamName, err)
 			return err
 		}
 
-		logrus.Infof("TeamService.CreateTeamWithUsers: created team %s with ID %s", newTeam.Name, newTeam.ID)
-
 		team = newTeam
 
+		// Create users
 		for _, u := range users {
 			newUser, err := s.userRepo.Create(ctx, u.ID, u.Name, team.ID, u.IsActive)
 			if err != nil {
-				if errors.Is(err, repository.ErrUserAlreadyExists) {
-					logrus.Warnf("TeamService.CreateTeamWithUsers: user %s already exists", u.Name)
-					return ErrUserAlreadyExists
-				}
-				logrus.Errorf("TeamService.CreateTeamWithUsers: failed to create user %s: %v", u.Name, err)
 				return err
 			}
 
-			logrus.Infof("TeamService.CreateTeamWithUsers: created user %s with ID %s", newUser.Name, newUser.ID)
 			team.Members = append(team.Members, newUser)
 		}
 		return nil
 	})
 
 	if err != nil {
+		if errors.Is(err, repository.ErrTeamAlreadyExists) {
+			return entity.Team{}, ErrTeamAlreadyExists
+		}
+		if errors.Is(err, repository.ErrUserAlreadyExists) {
+			return entity.Team{}, ErrUserAlreadyExists
+		}
+		logrus.Errorf("TeamService.CreateTeamWithUsers: failed to create team %s: %v", teamName, err)
 		return entity.Team{}, ErrCannotCreateTeam
 	}
 
@@ -78,31 +73,27 @@ func (s *Service) GetTeamWithMembers(ctx context.Context, teamName string) (enti
 		// Get a team
 		rowTeam, err := s.TeamRepo.GetByName(ctx, teamName)
 		if err != nil {
-			if errors.Is(err, repository.ErrTeamNotFound) {
-				logrus.Warnf("TeamService.GetTeamWithMembers: team %s not found", teamName)
-				return ErrTeamNotFound
-			}
-			logrus.Errorf("TeamService.GetTeamWithMembers: failed to get team %s: %v", teamName, err)
 			return err
 		}
 
-		logrus.Infof("TeamService.GetTeamWithMembers: found team %s with ID %s", rowTeam.Name, rowTeam.ID)
 		team = rowTeam
 
 		// Get members of team
 		users, err := s.userRepo.GetByTeamID(ctx, rowTeam.ID)
-
 		if err != nil {
-			logrus.Errorf("TeamService.GetTeamWithMembers: failed to get users for team %s: %v", teamName, err)
 			return err
 		}
 
-		logrus.Infof("TeamService.GetTeamWithMembers: found %d users for team %s", len(users), teamName)
 		team.Members = users
 		return nil
 	})
 
 	if err != nil {
+		if errors.Is(err, repository.ErrTeamNotFound) {
+			logrus.Warnf("TeamService.GetTeamWithMembers: team %s not found", teamName)
+			return entity.Team{}, ErrTeamNotFound
+		}
+		logrus.Errorf("TeamService.GetTeamWithMembers: failed to get team %s: %v", teamName, err)
 		return entity.Team{}, ErrCannotFetchTeam
 	}
 

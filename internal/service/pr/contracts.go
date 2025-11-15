@@ -9,7 +9,7 @@ import (
 )
 
 type PRRepo interface {
-	Create(ctx context.Context, ID, title, authorID string, needMoreReviewers bool) (entity.PullRequest, error)
+	Create(ctx context.Context, ID, title, authorID, statusName string, needMoreReviewers bool) (entity.PullRequest, error)
 	GetAll(ctx context.Context, limit int, offset int) (PRs []entity.PullRequest, total int, err error)
 	AssignReviewers(ctx context.Context, prID string, reviewerIDs []string) error
 	ReassignReviewer(ctx context.Context, prID, oldReviewerID, newReviewerID string) error

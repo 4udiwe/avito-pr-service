@@ -12,11 +12,11 @@ type RowStatus struct {
 }
 
 type RowPullRequest struct {
-	ID                string `db:"id"`
-	Title             string `db:"title"`
-	AuthorID          string `db:"author_id"`
-	StatusID          int    `db:"status_id"`
-	StatusName        string
+	ID                string     `db:"id"`
+	Title             string     `db:"title"`
+	AuthorID          string     `db:"author_id"`
+	StatusID          int        `db:"status_id"`
+	StatusName        string     `db:"status_name"`
 	NeedMoreReviewers bool       `db:"need_more_reviewers"`
 	CreatedAt         time.Time  `db:"created_at"`
 	MergedAt          *time.Time `db:"merged_at"`
@@ -24,7 +24,7 @@ type RowPullRequest struct {
 
 type RowPullRequestWithReviewerIDs struct {
 	RowPullRequest
-	ReviewerIDs []string
+	ReviewerIDs []string `db:"reviewer_ids"`
 }
 
 type RowPRReviewer struct {

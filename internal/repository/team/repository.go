@@ -8,8 +8,9 @@ import (
 	"github.com/4udiwe/avito-pr-service/internal/repository"
 	"github.com/4udiwe/avito-pr-service/pkg/postgres"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -111,20 +112,13 @@ func (r *Repository) GetAll(
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var t entity.Team
-
-		if err := rows.Scan(
-			&t.ID,
-			&t.Name,
-			&t.CreatedAt,
-		); err != nil {
-			logrus.Error("TeamRepository.GetAll scan error: ", err)
-			return nil, 0, repository.ErrCannotFetchTeams
-		}
-
-		teams = append(teams, t)
+	rowsTeams, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowTeam])
+	if err != nil {
+		logrus.Error("TeamRepository.GetAll scan error: ", err)
+		return nil, 0, repository.ErrCannotFetchTeams
 	}
+
+	teams = lo.Map(rowsTeams, func(r RowTeam, _ int) entity.Team { return r.ToEntity() })
 
 	// Get total count
 	countQuery, countArgs, _ := r.Builder.

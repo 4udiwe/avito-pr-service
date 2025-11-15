@@ -31,7 +31,6 @@ func (s *Service) SetUserStatus(ctx context.Context, userID string, isActive boo
 
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			logrus.Warnf("UserService.SetUserStatus: user %s not found", userID)
 			return entity.User{}, ErrUserNotFound
 		}
 		logrus.Errorf("UserService.SetUserStatus: failed to set active status for user %s: %v", userID, err)
@@ -42,7 +41,6 @@ func (s *Service) SetUserStatus(ctx context.Context, userID string, isActive boo
 
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			logrus.Warnf("UserService.SetUserStatus: user %s not found after status update", userID)
 			return entity.User{}, ErrUserNotFound
 		}
 		logrus.Errorf("UserService.SetUserStatus: failed to get user %s after status update: %v", userID, err)
@@ -62,7 +60,6 @@ func (s *Service) GetUserReviews(ctx context.Context, userID string) ([]entity.P
 		// Check if user exists
 		_, err := s.userRepo.GetByID(ctx, userID)
 		if err != nil {
-			logrus.Warnf("UserService.GetUserReviews: user %s not found", userID)
 			return err
 		}
 

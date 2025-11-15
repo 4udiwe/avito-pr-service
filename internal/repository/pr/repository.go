@@ -9,8 +9,9 @@ import (
 	"github.com/4udiwe/avito-pr-service/internal/repository"
 	"github.com/4udiwe/avito-pr-service/pkg/postgres"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,14 +23,20 @@ func New(pg *postgres.Postgres) *Repository {
 	return &Repository{pg}
 }
 
-func (r *Repository) Create(ctx context.Context, ID, title, authorID string, needMoreReviewers bool) (entity.PullRequest, error) {
+func (r *Repository) Create(ctx context.Context, ID, title, authorID, statusName string, needMoreReviewers bool) (entity.PullRequest, error) {
 	logrus.Infof("PRRepository.Create: creating PR with title %s", title)
 
-	query, args, _ := r.Builder.Insert("pr").
-		Columns("id", "title", "author_id", "need_more_reviewers").
-		Values(ID, title, authorID, needMoreReviewers).
-		Suffix("RETURNING status_id, created_at, merged_at").
-		ToSql()
+	query := `
+		INSERT INTO pr (id, title, author_id, need_more_reviewers, status_id)
+		SELECT $1, $2, $3, $4, s.id
+		FROM pr_status s
+		WHERE s.name = $5
+		 RETURNING 
+            status_id,
+            (SELECT name FROM pr_status WHERE id = status_id) AS status_name,
+            created_at,
+            merged_at;
+		`
 
 	row := RowPullRequest{
 		ID:                ID,
@@ -37,9 +44,9 @@ func (r *Repository) Create(ctx context.Context, ID, title, authorID string, nee
 		AuthorID:          authorID,
 		NeedMoreReviewers: needMoreReviewers,
 	}
-
-	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
+	err := r.GetTxManager(ctx).QueryRow(ctx, query, ID, title, authorID, statusName, needMoreReviewers).Scan(
 		&row.StatusID,
+		&row.StatusName,
 		&row.CreatedAt,
 		&row.MergedAt,
 	)
@@ -59,7 +66,6 @@ func (r *Repository) Create(ctx context.Context, ID, title, authorID string, nee
 		logrus.Errorf("PRRepository.Create: failed to create PR: %v", err)
 		return entity.PullRequest{}, err
 	}
-	logrus.Debugf("row PR: %v", row)
 	return row.ToEntity(), nil
 }
 
@@ -262,21 +268,13 @@ func (r *Repository) GetReviewersByPR(ctx context.Context, prID string) ([]entit
 	}
 	defer rows.Close()
 
-	var reviewers []entity.PRReviewer
-	for rows.Next() {
-		var rowReviewer RowPRReviewer
-		if err := rows.Scan(
-			&rowReviewer.ID,
-			&rowReviewer.PRID,
-			&rowReviewer.ReviewerID,
-			&rowReviewer.AssignedAt,
-		); err != nil {
-			logrus.Errorf("PRRepository.GetReviewersByPR: failed to scan reviewer for PR %s: %v", prID, err)
-			return nil, err
-		}
-		logrus.Debugf("FOUND ROW REVIEWER ID: %v", rowReviewer.ID)
-		reviewers = append(reviewers, rowReviewer.ToEntity())
+	rowsReviewers, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowPRReviewer])
+	if err != nil {
+		logrus.Errorf("PRRepository.GetReviewersByPR: failed to scan reviewer for PR %s: %v", prID, err)
+		return nil, err
 	}
+
+	reviewers := lo.Map(rowsReviewers, func(r RowPRReviewer, _ int) entity.PRReviewer { return r.ToEntity() })
 
 	logrus.Infof("PRRepository.GetReviewersByPR: reviewers found for PR %s", prID)
 	return reviewers, nil
@@ -307,26 +305,13 @@ func (r *Repository) ListByReviewer(ctx context.Context, reviewerID string) ([]e
 	}
 	defer rows.Close()
 
-	var PRs []entity.PullRequest
-
-	for rows.Next() {
-		var row RowPullRequest
-		if err := rows.Scan(
-			&row.ID,
-			&row.Title,
-			&row.AuthorID,
-			&row.StatusID,
-			&row.StatusName,
-			&row.NeedMoreReviewers,
-			&row.CreatedAt,
-			&row.MergedAt,
-		); err != nil {
-			logrus.Errorf("PRRepository.ListByReviewer: failed to scan row for reviewer %s: %v", reviewerID, err)
-			return nil, err
-		}
-
-		PRs = append(PRs, row.ToEntity())
+	rowsPRs, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowPullRequest])
+	if err != nil {
+		logrus.Errorf("PRRepository.ListByReviewer: failed to scan row for reviewer %s: %v", reviewerID, err)
+		return nil, err
 	}
+
+	PRs := lo.Map(rowsPRs, func(r RowPullRequest, _ int) entity.PullRequest { return r.ToEntity() })
 
 	logrus.Infof("PRRepository.ListByReviewer: PRs found for reviewer %s", reviewerID)
 	return PRs, nil
@@ -340,8 +325,6 @@ func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.Status, error)
 	).From("pr_status").
 		ToSql()
 
-	var statuses []entity.Status
-
 	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
 	if err != nil {
 		logrus.Errorf("PRRepository.GetPRStatuses: failed to get PR statuses: %v", err)
@@ -349,14 +332,13 @@ func (r *Repository) GetPRStatuses(ctx context.Context) ([]entity.Status, error)
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var rowStatus RowStatus
-		if err := rows.Scan(&rowStatus.ID, &rowStatus.Name); err != nil {
-			logrus.Errorf("PRRepository.GetPRStatuses: failed to scan PR status: %v", err)
-			return nil, err
-		}
-		statuses = append(statuses, rowStatus.ToEntity())
+	rowsStatuses, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowStatus])
+	if err != nil {
+		logrus.Errorf("PRRepository.GetPRStatuses: failed to scan PR status: %v", err)
+		return nil, err
 	}
+
+	statuses := lo.Map(rowsStatuses, func(r RowStatus, _ int) entity.Status { return r.ToEntity() })
 
 	logrus.Infof("PRRepository.GetPRStatuses: PR statuses retrieved")
 	return statuses, nil
@@ -421,26 +403,13 @@ func (r *Repository) GetAll(
 	}
 	defer rows.Close()
 
-	for rows.Next() {
-		var row RowPullRequestWithReviewerIDs
-
-		if err := rows.Scan(
-			&row.ID,
-			&row.Title,
-			&row.AuthorID,
-			&row.StatusID,
-			&row.StatusName,
-			&row.NeedMoreReviewers,
-			&row.CreatedAt,
-			&row.MergedAt,
-			&row.ReviewerIDs,
-		); err != nil {
-			logrus.Error("PRRepository.GetAll scan error: ", err)
-			return nil, 0, repository.ErrCannotFetchPRs
-		}
-
-		PRs = append(PRs, row.ToEntity())
+	rowsPRs, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowPullRequestWithReviewerIDs])
+	if err != nil {
+		logrus.Errorf("PRRepository.GetAll: failed to scan rows: %v", err)
+		return nil, 0, err
 	}
+
+	PRs = lo.Map(rowsPRs, func(r RowPullRequestWithReviewerIDs, _ int) entity.PullRequest { return r.ToEntity() })
 
 	// Get total count
 	countQuery, countArgs, _ := r.Builder.

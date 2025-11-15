@@ -1,23 +1,20 @@
-# Step 1: Builder
-FROM golang:1.24-alpine AS builder
-WORKDIR /app
-
-RUN apk add --no-cache git ca-certificates
-
-COPY go.mod go.sum ./
+# Step 1: Modules caching
+FROM golang:1.24-alpine3.22 AS modules
+COPY go.mod go.sum /modules/
+WORKDIR /modules
 RUN go mod download
 
-COPY . .
-
+# Step 2: Builder
+FROM golang:1.24-alpine3.22 AS builder
+COPY --from=modules /go/pkg /go/pkg
+COPY . /app
+WORKDIR /app
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/avito-pr ./cmd/main.go
 
-# Step 2: Final
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata
-
+# Step 3: Final
+FROM alpine:3.22
+COPY --from=builder /app/config /config
 COPY --from=builder /app/avito-pr /app/avito-pr
-COPY --from=builder /app/config/config.yaml /app/config/config.yaml
-COPY --from=builder /app/internal/database/migrations /app/database/migrations
 
 WORKDIR /app
 EXPOSE 8080

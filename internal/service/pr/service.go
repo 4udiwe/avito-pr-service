@@ -12,8 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const ReviewerCount = 2
-
 type Service struct {
 	PRRepo    PRRepo
 	UserRepo  UserRepo
@@ -37,50 +35,29 @@ func (s *Service) CreatePR(ctx context.Context, pullRequestID, title, authorID s
 		// Get PR author
 		author, err := s.UserRepo.GetByID(ctx, authorID)
 		if err != nil {
-			if errors.Is(err, repository.ErrUserNotFound) {
-				logrus.Warnf("PRService.CreatePR: author with ID %s not found", authorID)
-				return ErrAuthorNotFound
-			}
-			logrus.Errorf("PRService.CreatePR: failed to get author with ID %s: %v", authorID, err)
 			return err
 		}
 
 		// Get 2 random author`s teammates (limit = 2). Exclude authorID
-		candidates, err := s.UserRepo.GetRandomActiveTeammates(ctx, author.Team.ID, 2, authorID)
+		candidates, err := s.UserRepo.GetRandomActiveTeammates(ctx, author.Team.ID, entity.MinAmountOfReviewers, authorID)
 		if err != nil {
-			logrus.Errorf("PRService.CreatePR: failed to get teammates for author ID %s: %v", author.ID, err)
 			return err
 		}
 
-		reviewerIDs := make([]string, len(candidates))
-		for i, u := range candidates {
-			reviewerIDs[i] = u.ID
-		}
+		reviewerIDs := lo.Map(candidates, func(e entity.User, _ int) string { return e.ID })
 
 		// Check amount of reviewers, if < 2, set needMoreReviewers = true
 		var needMoreReviewersStatus bool
-		if len(reviewerIDs) < 2 {
+		if len(reviewerIDs) < entity.MinAmountOfReviewers {
 			needMoreReviewersStatus = true
 		}
 
-		logrus.Debugf("reviewerIDs: %v", reviewerIDs)
-		logrus.Debugf("NEEDMORE: %v", needMoreReviewersStatus)
-
 		// Create the PR
-		pr, err := s.PRRepo.Create(ctx, pullRequestID, title, authorID, needMoreReviewersStatus)
+		pr, err := s.PRRepo.Create(ctx, pullRequestID, title, authorID, string(entity.StatusOPEN), needMoreReviewersStatus)
 		if err != nil {
-			if errors.Is(err, repository.ErrPRAlreadyExists) {
-				logrus.Warnf("PRService.CreatePR: PR %s already exists", title)
-				return err
-			}
-			if errors.Is(err, repository.ErrAuthorNotFound) {
-				logrus.Warnf("PRService.CreatePR: author not found for PR %s", title)
-				return err
-			}
 			return err
 		}
 
-		logrus.Infof("PRService.CreatePR: created PR %s with ID %s", pr.Title, pr.ID)
 		pullRequest = pr
 
 		// Assign reviewers
@@ -94,25 +71,23 @@ func (s *Service) CreatePR(ctx context.Context, pullRequestID, title, authorID s
 	})
 
 	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return entity.PullRequest{}, ErrAuthorNotFound
+		}
+		if errors.Is(err, repository.ErrPRAlreadyExists) {
+			return entity.PullRequest{}, ErrPRAlreadyExists
+		}
 		if errors.Is(err, repository.ErrReviewerAlreadyAssigned) {
-			logrus.Warnf("PRService.CreatePR: reviewer already assigned to PR %s", title)
 			return entity.PullRequest{}, ErrReviewerAlreadyAssigned
 		}
 		if errors.Is(err, repository.ErrReviewerNotFound) {
-			logrus.Warnf("PRService.CreatePR: reviewer not found for PR %s", title)
 			return entity.PullRequest{}, ErrReviewerNotFound
 		}
+		logrus.Errorf("PRService.CreatePR: fail: %v", err)
 		return entity.PullRequest{}, ErrCannotCreatePR
 	}
 
-	// Get status of the PR
-	status, err := s.PRRepo.GetStatusByStatusID(ctx, pullRequest.Status.ID)
-	if err != nil {
-		return entity.PullRequest{}, ErrStatusNotFound
-	}
-	pullRequest.Status = status
-
-	logrus.Infof("PRService.CreatePR: successfully created PR %s", title)
+	logrus.Infof("PRService.CreatePR: created PR %s with ID %s", pullRequest.Title, pullRequest.ID)
 	return pullRequest, nil
 }
 
@@ -143,11 +118,6 @@ func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID stri
 		// Check if PR exists
 		pr, err := s.PRRepo.GetByID(ctx, prID)
 		if err != nil {
-			if errors.Is(err, repository.ErrPRNotFound) {
-				logrus.Warnf("PRService.ReassignReviewer: PR with ID %s not found", prID)
-				return ErrPRNotFound
-			}
-			logrus.Errorf("PRService.ReassignReviewer: failed to get PR with ID %s: %v", prID, err)
 			return err
 		}
 
@@ -155,17 +125,13 @@ func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID stri
 
 		// Check status of the PR
 		if pullRequest.Status.Name == entity.StatusMERGED {
-			logrus.Warnf("PRService.ReassignReviewer: cannot reassign reviewer for merged PR %s", prID)
 			return ErrCannotReassignReviewerForMergedPR
 		}
 
 		// Get old reviewer with team
 		oldReviewer, err := s.UserRepo.GetByID(ctx, oldReviewerID)
 		if err != nil {
-			if errors.Is(err, repository.ErrUserNotFound) {
-				logrus.Warnf("PRService.ReassignReviewer: Old reviewer with ID %s not found", oldReviewerID)
-			}
-			return ErrReviewerNotFound
+			return err
 		}
 
 		// Get random teammate (limit = 1). Exclude authorID and oldReviewerID
@@ -183,21 +149,29 @@ func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID stri
 	})
 
 	if err != nil {
-		if errors.Is(err, repository.ErrReviewerNotFound) {
-			logrus.Warnf("PRService.ReassignReviewer: reviewer not found for PR %s", prID)
+		if errors.Is(err, repository.ErrPRNotFound) {
+			return entity.PullRequest{}, "", ErrPRNotFound
+		}
+		if errors.Is(err, repository.ErrUserNotFound) {
 			return entity.PullRequest{}, "", ErrReviewerNotFound
 		}
+		if errors.Is(err, repository.ErrReviewerNotFound) {
+			return entity.PullRequest{}, "", ErrReviewerNotFound
+		}
+		logrus.Errorf("PRService.ReassignReviewer: fail %v", err)
 		return entity.PullRequest{}, "", ErrCannotAssignReviewer
 	}
 
 	// Get updated list of reviewers
 	reviewers, err = s.PRRepo.GetReviewersByPR(ctx, prID)
 	if err != nil {
+		logrus.Errorf("PRService.ReassignReviewer: failed to get new reviewers for PR %v", err)
 		return entity.PullRequest{}, "", ErrReviewerNotFound
 	}
 
 	pullRequest.Reviewers = lo.Map(reviewers, func(r entity.PRReviewer, _ int) string { return r.ReviewerID })
 
+	logrus.Infof("PRService.ReassignReviewer: new reviewer %v assigned to PR %v", newReviewer.ID, pullRequest)
 	return pullRequest, newReviewer.ID, nil
 }
 
@@ -210,7 +184,6 @@ func (s *Service) MergePR(ctx context.Context, prID string) (entity.PullRequest,
 	pullRequest, err := s.PRRepo.GetByID(ctx, prID)
 	if err != nil {
 		if errors.Is(err, repository.ErrPRNotFound) {
-			logrus.Warnf("PRService.MergePR: PR with ID %s not found", prID)
 			return entity.PullRequest{}, ErrPRNotFound
 		}
 		logrus.Errorf("PRService.MergePR: failed to PR %s: %v", prID, err)
@@ -225,16 +198,13 @@ func (s *Service) MergePR(ctx context.Context, prID string) (entity.PullRequest,
 	statuses, err := s.PRRepo.GetPRStatuses(ctx)
 	if err != nil {
 		logrus.Errorf("PRService.MergePR: failed to get PR statuses for PR %s: %v", prID, err)
-		return entity.PullRequest{}, err
+		return entity.PullRequest{}, ErrCannotFetchStatus
 	}
-
-	var mergedStatusID int
-	for _, status := range statuses {
-		if status.Name == entity.StatusMERGED {
-			mergedStatusID = status.ID
-			break
-		}
+	status, ok := lo.Find(statuses, func(s entity.Status) bool { return s.Name == entity.StatusMERGED })
+	if !ok {
+		return entity.PullRequest{}, ErrStatusNotFound
 	}
+	mergedStatusID := status.ID
 
 	// Update PR status to MERGED
 	err = s.PRRepo.UpdateStatus(ctx, prID, mergedStatusID, time.Now())
@@ -267,11 +237,6 @@ func (s *Service) AssignReviewer(ctx context.Context, prID, newReviewerID string
 		// Get PR
 		pr, err := s.PRRepo.GetByID(ctx, prID)
 		if err != nil {
-			if errors.Is(err, repository.ErrPRNotFound) {
-				logrus.Warnf("PRService.AssignReviewer: PR with ID %s not found", prID)
-				return ErrPRNotFound
-			}
-			logrus.Infof("PRService.AssignReviewer: failed to get PR %s", prID)
 			return err
 		}
 
@@ -285,14 +250,6 @@ func (s *Service) AssignReviewer(ctx context.Context, prID, newReviewerID string
 		// Assign new reviewer
 		err = s.PRRepo.AssignReviewer(ctx, prID, newReviewerID)
 		if err != nil {
-			if errors.Is(err, repository.ErrReviewerNotFound) {
-				logrus.Warnf("PRService.AssignReviewer: new reviewer %s not found", newReviewerID)
-				return ErrReviewerNotFound
-			}
-			if errors.Is(err, repository.ErrReviewerAlreadyAssigned) {
-				logrus.Warnf("PRService.AssignReviewer: new reviewer %s already assigned", newReviewerID)
-				return ErrReviewerAlreadyAssigned
-			}
 			return err
 		}
 
@@ -307,6 +264,15 @@ func (s *Service) AssignReviewer(ctx context.Context, prID, newReviewerID string
 	})
 
 	if err != nil {
+		if errors.Is(err, repository.ErrPRNotFound) {
+			return entity.PullRequest{}, ErrPRNotFound
+		}
+		if errors.Is(err, repository.ErrReviewerNotFound) {
+			return entity.PullRequest{}, ErrReviewerNotFound
+		}
+		if errors.Is(err, repository.ErrReviewerAlreadyAssigned) {
+			return entity.PullRequest{}, ErrReviewerAlreadyAssigned
+		}
 		logrus.Errorf("PRService.AssignReviewer: failed to assign new reviewer %s: %v", newReviewerID, err)
 		return entity.PullRequest{}, ErrCannotAssignReviewer
 	}
@@ -314,7 +280,8 @@ func (s *Service) AssignReviewer(ctx context.Context, prID, newReviewerID string
 	// Get updated list of reviewers
 	reviewers, err := s.PRRepo.GetReviewersByPR(ctx, prID)
 	if err != nil {
-		return entity.PullRequest{}, ErrReviewerNotFound
+		logrus.Errorf("PRService.AssignReviewer: failed to get updated reviewers for PR %s: %v", pullRequest.ID, err)
+		return entity.PullRequest{}, ErrCannotAssignReviewer
 	}
 
 	pullRequest.Reviewers = lo.Map(reviewers, func(r entity.PRReviewer, _ int) string { return r.ReviewerID })

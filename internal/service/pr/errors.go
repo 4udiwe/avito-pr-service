@@ -11,7 +11,8 @@ var (
 	ErrCannotCreatePR = errors.New("cannot create PR")
 	ErrCannotMergePR  = errors.New("cannot merge PR")
 
-	ErrStatusNotFound = errors.New("status not found")
+	ErrStatusNotFound    = errors.New("status not found")
+	ErrCannotFetchStatus = errors.New("cannot fetch status")
 
 	ErrReviewerNotFound                  = errors.New("reviewer not found")
 	ErrCannotAssignReviewer              = errors.New("cannot assign reviewer")

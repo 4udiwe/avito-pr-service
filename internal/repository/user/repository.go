@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/4udiwe/avito-pr-service/internal/entity"
 	"github.com/4udiwe/avito-pr-service/internal/repository"
@@ -12,8 +11,9 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/samber/lo"
 	"github.com/sirupsen/logrus"
 )
 
@@ -49,7 +49,6 @@ func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UU
 		var pgErr *pgconn.PgError
 		if ok := errors.As(err, &pgErr); ok {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				logrus.Warnf("UserRepository.Create: user already exists: %s", name)
 				return entity.User{}, repository.ErrUserAlreadyExists
 			}
 		}
@@ -90,7 +89,6 @@ func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
-			logrus.Warnf("UserRepository.GetByID: no user with ID %s", ID)
 			return entity.User{}, repository.ErrUserNotFound
 		}
 		logrus.Errorf("UserRepository.GetByID: failed to get user by ID %s: %v", ID, err)
@@ -112,25 +110,17 @@ func (r *Repository) GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entit
 	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
 	if err != nil {
 		logrus.Errorf("UserRepository.GetByTeamID: failed to query users by team ID %s: %v", teamID, err)
-		return nil, fmt.Errorf("UserRepository.GetByTeamID: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var users []entity.User
-	for rows.Next() {
-		rowUser := RowUser{}
-		if err := rows.Scan(
-			&rowUser.ID,
-			&rowUser.Name,
-			&rowUser.IsActive,
-			&rowUser.TeamID,
-			&rowUser.CreatedAt,
-		); err != nil {
-			logrus.Errorf("UserRepository.GetByTeamID: failed to scan user row for team ID %s: %v", teamID, err)
-			return nil, fmt.Errorf("UserRepository.GetByTeamID: %w", err)
-		}
-		users = append(users, rowUser.ToEntity())
+	rowsUsers, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowUser])
+	if err != nil {
+		logrus.Errorf("UserRepository.GetByTeamID: failed to scan user row for team ID %s: %v", teamID, err)
+		return nil, err
 	}
+
+	users := lo.Map(rowsUsers, func(r RowUser, _ int) entity.User { return r.ToEntity() })
 
 	logrus.Infof("UserRepository.GetByTeamID: found %d users for team ID %s", len(users), teamID)
 	return users, nil
@@ -150,7 +140,6 @@ func (r *Repository) SetTeamID(ctx context.Context, userID string, teamID uuid.U
 		return err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		logrus.Warnf("UserRepository.SetTeamID: no user found with ID %s to set team ID %s", userID, teamID)
 		return repository.ErrUserNotFound
 	}
 	return nil
@@ -170,7 +159,6 @@ func (r *Repository) SetActiveStatus(ctx context.Context, userID string, isActiv
 		return err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		logrus.Warnf("UserRepository.SetActiveStatus: no user found with ID %s to set isActive=%t", userID, isActive)
 		return repository.ErrUserNotFound
 	}
 	return nil
@@ -191,24 +179,17 @@ func (r *Repository) GetRandomActiveTeammates(ctx context.Context, teamID uuid.U
 	rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
 	if err != nil {
 		logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to query random active teammates: %v", err)
-		return nil, fmt.Errorf("UserRepository.GetRandomActiveTeammates: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var users []entity.User
-	for rows.Next() {
-		rowUser := RowUser{}
-		if err := rows.Scan(
-			&rowUser.ID,
-			&rowUser.Name,
-			&rowUser.TeamID,
-			&rowUser.CreatedAt,
-		); err != nil {
-			logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to scan user row: %v", err)
-			return nil, fmt.Errorf("UserRepository.GetRandomActiveTeammates: %w", err)
-		}
-		users = append(users, rowUser.ToEntity())
+	rowsUsers, err := pgx.CollectRows(rows, pgx.RowToStructByName[RowUser])
+	if err != nil {
+		logrus.Errorf("UserRepository.GetRandomActiveTeammates: failed to scan user row for team ID %s: %v", teamID, err)
+		return nil, err
 	}
+
+	users := lo.Map(rowsUsers, func(r RowUser, _ int) entity.User { return r.ToEntity() })
 
 	logrus.Infof("UserRepository.GetRandomActiveTeammates: found %d random active teammates", len(users))
 	return users, nil

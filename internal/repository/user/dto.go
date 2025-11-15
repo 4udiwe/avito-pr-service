@@ -11,7 +11,7 @@ type RowUser struct {
 	ID        string    `db:"id"`
 	Name      string    `db:"name"`
 	TeamID    uuid.UUID `db:"team_id"`
-	TeamName  string
+	TeamName  string    `db:"team_name"`
 	IsActive  bool      `db:"is_active"`
 	CreatedAt time.Time `db:"created_at"`
 }

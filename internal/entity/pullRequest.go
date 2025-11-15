@@ -7,6 +7,8 @@ type PRStatusName string
 const (
 	StatusOPEN   PRStatusName = "OPEN"
 	StatusMERGED PRStatusName = "MERGED"
+
+	MinAmountOfReviewers int = 2
 )
 
 type Status struct {
