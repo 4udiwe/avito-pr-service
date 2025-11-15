@@ -149,6 +149,9 @@ func (s *Service) ReassignReviewer(ctx context.Context, prID, oldReviewerID stri
 	})
 
 	if err != nil {
+		if errors.Is(err, ErrNoMoreReviewersToReassign) {
+			return entity.PullRequest{}, "", ErrNoMoreReviewersToReassign
+		}
 		if errors.Is(err, repository.ErrPRNotFound) {
 			return entity.PullRequest{}, "", ErrPRNotFound
 		}
@@ -264,6 +267,9 @@ func (s *Service) AssignReviewer(ctx context.Context, prID, newReviewerID string
 	})
 
 	if err != nil {
+		if errors.Is(err, ErrPRAlreadyHas2Reviewers) {
+			return entity.PullRequest{}, ErrPRAlreadyHas2Reviewers
+		}
 		if errors.Is(err, repository.ErrPRNotFound) {
 			return entity.PullRequest{}, ErrPRNotFound
 		}

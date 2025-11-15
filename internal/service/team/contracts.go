@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:generate go tool mockgen -source=contracts.go -destination=mocks/mocks.go -package=mocks
+
 type UserRepo interface {
 	Create(ctx context.Context, ID, name string, teamID uuid.UUID, isActive bool) (entity.User, error)
 	GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entity.User, error)

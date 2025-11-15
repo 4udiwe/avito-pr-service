@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:generate go tool mockgen -source=contracts.go -destination=mocks/mocks.go -package=mocks
+
 type PRRepo interface {
 	Create(ctx context.Context, ID, title, authorID, statusName string, needMoreReviewers bool) (entity.PullRequest, error)
 	GetAll(ctx context.Context, limit int, offset int) (PRs []entity.PullRequest, total int, err error)
