@@ -1,0 +1,55 @@
+volumes:
+  app_logs:
+    driver: local
+
+networks:
+  net:
+    driver: bridge
+
+services:
+  app:
+    build: .
+    environment:
+      - CONFIG_PATH=/app/config/config.yaml
+      - POSTGRES_URL=postgres://test_user:test_password@postgres_test:5432/test_db
+      - JWT_SECRET=test_jwt_secret_key_123
+      - LOG_LEVEL=debug
+    depends_on:
+      - postgres_test
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml:ro
+      - app_logs:/logs
+    networks:
+      - net
+
+  postgres_test:
+    image: postgres:17.4-alpine3.21
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - net
+
+  integration:
+    build:
+      context: .
+      dockerfile: test/Dockerfile
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - net

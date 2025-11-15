@@ -50,5 +50,5 @@ func (h *handler) Handle(ctx echo.Context, in Request) error {
 	var response dto.Team
 	response.FillFromEntity(team)
 
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.JSON(http.StatusCreated, response)
 }

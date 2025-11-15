@@ -49,5 +49,5 @@ func (h *handler) Handle(ctx echo.Context, in Request) error {
 	response := Response{}
 	response.PR.FillFromEntity(PR)
 
-	return ctx.JSON(http.StatusOK, response)
+	return ctx.JSON(http.StatusCreated, response)
 }
