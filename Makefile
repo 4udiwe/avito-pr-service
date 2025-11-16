@@ -12,3 +12,6 @@ integration-test:
 		--exit-code-from integration \
 		--build \
 		--remove-orphans
+
+load-test:
+	docker compose -f docker-compose.k6.yaml up --build 

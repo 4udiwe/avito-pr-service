@@ -6,8 +6,7 @@ http:
   port: "8080"
 
 logger:
-  level: "debug"
+  level: "error"
 
 postgres:
   connect_timeout: 2s
-

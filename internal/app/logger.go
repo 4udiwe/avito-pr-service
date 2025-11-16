@@ -9,7 +9,7 @@ import (
 func initLogger(level string) {
 	logrusLevel, err := log.ParseLevel(level)
 	if err != nil {
-		log.SetLevel(log.DebugLevel)
+		log.SetLevel(log.ErrorLevel)
 	} else {
 		log.SetLevel(logrusLevel)
 	}

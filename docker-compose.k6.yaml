@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  postgres_test:
+    image: postgres:17.4-alpine3.21
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_db
+    networks:
+      - app-network
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres_test
+    volumes:
+      - ./config:/app/config
+    environment:
+      POSTGRES_URL: postgres://test_user:test_password@postgres_test:5432/test_db
+      SERVER_PORT: ${SERVER_PORT}
+      CONFIG_PATH: ${CONFIG_PATH}
+    networks:
+      - app-network
+
+  k6:
+    build:
+      context: .
+      dockerfile: test/load_test/Dockerfile
+    depends_on:
+      - app
+    environment:
+      BASE_URL: http://app:8080
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
