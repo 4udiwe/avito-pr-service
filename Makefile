@@ -1,5 +1,5 @@
 cover:
-	go test -count=1 -coverprofile=coverage.out $(shell go list ./internal/... | grep -E "internal/service" | grep -v -E "mocks|middleware|decorator")
+	go test -count=1 -coverprofile=coverage.out $(shell go list ./internal/... | grep -E "internal/service" | grep -v -E "mocks|decorator|stats")
 	go tool cover -func=coverage.out
 	go tool cover -html=coverage.out
 
