@@ -25,39 +25,54 @@ func New(pg *postgres.Postgres) *Repository {
 	return &Repository{pg}
 }
 
-func (r *Repository) Create(ctx context.Context, ID, name string, teamID uuid.UUID, isActive bool) (entity.User, error) {
-	logrus.Infof("UserRepository.Create: creating user with name %s", name)
+func (r *Repository) CreateUsersBatch(ctx context.Context, users []entity.User, teamID uuid.UUID) ([]entity.User, error) {
+    logrus.Info("UserRepository.CreateUsersBatch: creating users")
 
-	query, args, _ := r.Builder.Insert("app_user").
-		Columns("id", "name", "team_id", "is_active").
-		Values(ID, name, teamID, isActive).
-		Suffix("RETURNING created_at").
-		ToSql()
+    queryBuilder := r.Builder.Insert("app_user").
+        Columns("id", "name", "team_id", "is_active")
 
-	rowUser := RowUser{
-		ID:       ID,
-		Name:     name,
-		TeamID:   teamID,
-		IsActive: isActive,
-	}
+    for _, u := range users {
+        queryBuilder = queryBuilder.Values(u.ID, u.Name, teamID, u.IsActive)
+    }
+    query, args, _ := queryBuilder.Suffix("RETURNING id, name, team_id, is_active, created_at").ToSql()
 
-	err := r.GetTxManager(ctx).QueryRow(ctx, query, args...).Scan(
-		&rowUser.CreatedAt,
-	)
+    rows, err := r.GetTxManager(ctx).Query(ctx, query, args...)
+    if err != nil {
+        var pgErr *pgconn.PgError
+        if ok := errors.As(err, &pgErr); ok {
+            if pgErr.Code == pgerrcode.UniqueViolation {
+                return nil, repository.ErrUserAlreadyExists
+            }
+        }
+        logrus.Errorf("UserRepository.CreateUsersBatch: failed to create users: %v", err)
+        return nil, err
+    }
 
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if ok := errors.As(err, &pgErr); ok {
-			if pgErr.Code == pgerrcode.UniqueViolation {
-				return entity.User{}, repository.ErrUserAlreadyExists
-			}
-		}
-		logrus.Errorf("UserRepository.Create: failed to create user: %v", err)
-		return entity.User{}, err
-	}
+    var rowsUser []RowUser
+    for rows.Next() {
+        var ru RowUser
+        err := rows.Scan(
+            &ru.ID,
+            &ru.Name, 
+            &ru.TeamID,
+            &ru.IsActive,
+            &ru.CreatedAt,
+        )
+        if err != nil {
+            logrus.Errorf("UserRepository.CreateUsersBatch: scan failed: %v", err)
+            return nil, err
+        }
+        rowsUser = append(rowsUser, ru)
+    }
 
-	logrus.Infof("UserRepository.Create: user created with ID %s", rowUser.ID)
-	return rowUser.ToEntity(), nil
+    if err := rows.Err(); err != nil {
+        logrus.Errorf("UserRepository.CreateUsersBatch: rows error: %v", err)
+        return nil, err
+    }
+
+    entities := lo.Map(rowsUser, func(r RowUser, _ int) entity.User { return r.ToEntity() })
+
+    return entities, nil
 }
 
 func (r *Repository) GetByID(ctx context.Context, ID string) (entity.User, error) {

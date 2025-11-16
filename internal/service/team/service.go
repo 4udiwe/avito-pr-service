@@ -42,14 +42,11 @@ func (s *Service) CreateTeamWithUsers(ctx context.Context, teamName string, user
 		team = newTeam
 
 		// Create users
-		for _, u := range users {
-			newUser, err := s.userRepo.Create(ctx, u.ID, u.Name, team.ID, u.IsActive)
-			if err != nil {
-				return err
-			}
-
-			team.Members = append(team.Members, newUser)
+		team.Members, err = s.userRepo.CreateUsersBatch(ctx, users, team.ID)
+		if err != nil {
+			return err
 		}
+
 		return nil
 	})
 

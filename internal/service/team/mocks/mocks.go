@@ -42,19 +42,19 @@ func (m *MockUserRepo) EXPECT() *MockUserRepoMockRecorder {
 	return m.recorder
 }
 
-// Create mocks base method.
-func (m *MockUserRepo) Create(ctx context.Context, ID, name string, teamID uuid.UUID, isActive bool) (entity.User, error) {
+// CreateUsersBatch mocks base method.
+func (m *MockUserRepo) CreateUsersBatch(ctx context.Context, users []entity.User, teamID uuid.UUID) ([]entity.User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, ID, name, teamID, isActive)
-	ret0, _ := ret[0].(entity.User)
+	ret := m.ctrl.Call(m, "CreateUsersBatch", ctx, users, teamID)
+	ret0, _ := ret[0].([]entity.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Create indicates an expected call of Create.
-func (mr *MockUserRepoMockRecorder) Create(ctx, ID, name, teamID, isActive any) *gomock.Call {
+// CreateUsersBatch indicates an expected call of CreateUsersBatch.
+func (mr *MockUserRepoMockRecorder) CreateUsersBatch(ctx, users, teamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockUserRepo)(nil).Create), ctx, ID, name, teamID, isActive)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUsersBatch", reflect.TypeOf((*MockUserRepo)(nil).CreateUsersBatch), ctx, users, teamID)
 }
 
 // GetByTeamID mocks base method.

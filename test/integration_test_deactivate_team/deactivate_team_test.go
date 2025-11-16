@@ -12,8 +12,8 @@ import (
 
 func TestDeactivateTeamAndReassignPRs(t *testing.T) {
 	const (
-		teamsAmount  = 20
-		usersPerTeam = 20
+		teamsAmount  = 100
+		usersPerTeam = 1000
 	)
 
 	// Create teams with users

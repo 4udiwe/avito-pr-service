@@ -25,7 +25,7 @@ docker compose down --remove-orphans
 Сервис предоставляет API для работы с командами пользователей и pull request'ами.
 Основные ендмоинты сервиса реализованы в сооветсвии со спецификацией API. 
 
-Спецификация API: [swagger](api\swagger.yaml).
+Спецификация API: [swagger](api/swagger.yaml).
 
 ### Также были добавлены следующие ендпоинты:
 - __GET pullRequest__
@@ -77,13 +77,13 @@ docker compose down --remove-orphans
 ## Общее
 
 ### Генерация DTO
-Для ендпоинтов, описанных в спецификации используются [`DTO`](internal\dto\dto.gen.go), сгенерированные с помощью `oapi-codegen`.
+Для ендпоинтов, описанных в спецификации используются [`DTO`](internal/dto/dto.gen.go), сгенерированные с помощью `oapi-codegen`.
 
 ### Линтер
 Конфигурация линтера описана в [`golangci`](.golangci.yaml)
 
 ### TxManager
-Для транзакций используется TxManager, описанный в [`postgres.go`](pkg\postgres\postgres.go)
+Для транзакций используется TxManager, описанный в [`postgres.go`](pkg/postgres/postgres.go)
 
 ## Тестирование
 ### Unit-тесты
@@ -104,8 +104,9 @@ make cover
 
 | Число пользователей             | Время работы ендпоинта |
 |---------------------------------|------------------------|
-| 20 команд по 20 пользователей   | 3.953437ms             |
-| 100 команд по 100 пользователей | 39.417896ms            |
+| 20 команд по 20 пользователей   | 2.297384ms             |
+| 100 команд по 100 пользователей | 27.80544ms             |
+| 100 команд по 1000 пользователей | 239.542112ms          |
 
 Полученное время укладывается в рамки, заданные в задании.
 
@@ -114,7 +115,7 @@ make cover
 make integration-test
 ```
 ### Нагрузочное тестирование
-Нагрузочное тестирование было реализовано с помощью `K6`. Cам скрипт описан [`тут`](test\load_test\load_test.js)
+Нагрузочное тестирование было реализовано с помощью `K6`. Cам скрипт описан [`тут`](test/load_test/load_test.js)
 
 Сценарий:
 - Создание команды
@@ -132,35 +133,41 @@ make load-test
 
   ```
 █ THRESHOLDS                                                                                                                                                         
+                                                                                                                                                                     
   checks                                                                                                                                                             
   ✓ 'rate>0.999' rate=100.00%                                                                                                                                        
+                                                                                                                                                                     
   http_req_duration                                                                                                                                                  
-  ✓ 'p(95)<300' p(95)=157.49ms                                                                                                                                       
+  ✓ 'p(95)<300' p(95)=244.13ms
+                                                                                                                                                                     
                                                                                                                                                                      
 █ TOTAL RESULTS                                                                                                                                                      
-  checks_total.......: 626116  3433.027712/s                                                                                                                         
-  checks_succeeded...: 100.00% 626116 out of 626116                                                                                                                  
-  checks_failed......: 0.00%   0 out of 626116
+                                                                                                                                                                     
+  checks_total.......: 516890  2847.367346/s                                                                                                                         
+  checks_succeeded...: 100.00% 516890 out of 516890
+  checks_failed......: 0.00%   0 out of 516890                                                                                                                       
                                                                                                                                                                      
   ✓ team created                                                                                                                                                     
-  ✓ team fetched
+  ✓ team fetched                                                                                                                                                     
   ✓ PR created                                                                                                                                                       
   ✓ getReview success                                                                                                                                                
+
   HTTP                                                                                                                                                               
-  http_req_duration..............: avg=83.25ms min=858.01µs med=80.77ms max=877.35ms p(90)=137.08ms p(95)=157.49ms                                                   
-    { expected_response:true }...: avg=83.25ms min=858.01µs med=80.77ms max=877.35ms p(90)=137.08ms p(95)=157.49ms
-  http_req_failed................: 0.00%  0 out of 626116                                                                                                            
-  http_reqs......................: 626116 3433.027712/s                                                                                                              
-  EXECUTION                                                                                                                                                          
-  dropped_iterations.............: 53174  291.555903/s                                                                                                               
-  iteration_duration.............: avg=2.41s   min=1.02s    med=2.52s   max=4.49s    p(90)=3.14s    p(95)=3.41s   
-  iterations.....................: 36834  201.962804/s                                                                                                               
-  vus............................: 294    min=294         max=500                                                                                                    
-  vus_max........................: 500    min=295         max=500
-                                                                                                                                                                     
-  NETWORK                                                                                                                                                            
-  data_received..................: 255 MB 1.4 MB/s
-  data_sent......................: 122 MB 670 kB/s
+  http_req_duration..............: avg=113.93ms min=863.24µs med=101.73ms max=1.08s p(90)=198.5ms p(95)=244.13ms                                                     
+    { expected_response:true }...: avg=113.93ms min=863.24µs med=101.73ms max=1.08s p(90)=198.5ms p(95)=244.13ms
+  http_req_failed................: 0.00%  0 out of 516890
+  http_reqs......................: 516890 2847.367346/s
+
+  EXECUTION
+  dropped_iterations.............: 59604  328.337718/s
+  iteration_duration.............: avg=2.94s    min=1.02s    med=2.99s    max=5.49s p(90)=3.99s   p(95)=4.24s
+  iterations.....................: 30397  167.446507/s
+  vus............................: 347    min=294         max=500
+  vus_max........................: 500    min=294         max=500
+
+  NETWORK
+  data_received..................: 211 MB 1.2 MB/s
+  data_sent......................: 101 MB 556 kB/s
 
   ```
 </details>
@@ -171,7 +178,7 @@ make load-test
 - Docker & Docker Compose
 
 ## Проблемы и решения
-При генерации DTO и последующем тестировании заметил, что полученная структура запроса для ендпоинта __pullRequest/reassign__ отличается от того, что представлено в примере спецификации [swagger](api\swagger.yaml). Было решено использовать сгенерированный DTO, поэтому правильное тело запроса к ручке выглядит так:
+При генерации DTO и последующем тестировании заметил, что полученная структура запроса для ендпоинта __pullRequest/reassign__ отличается от того, что представлено в примере спецификации [swagger](api/swagger.yaml). Было решено использовать сгенерированный DTO, поэтому правильное тело запроса к ручке выглядит так:
 ```
 {
   "pull_request_id": "pr-1001",

@@ -14,4 +14,4 @@ integration-test:
 		--remove-orphans
 
 load-test:
-	docker compose -f docker-compose.k6.yaml up --build 
+	docker compose -f docker-compose.k6.yaml up --build --abort-on-container-exit

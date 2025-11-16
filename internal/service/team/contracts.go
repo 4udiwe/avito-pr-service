@@ -10,9 +10,9 @@ import (
 //go:generate go tool mockgen -source=contracts.go -destination=mocks/mocks.go -package=mocks
 
 type UserRepo interface {
-	Create(ctx context.Context, ID, name string, teamID uuid.UUID, isActive bool) (entity.User, error)
 	GetByTeamID(ctx context.Context, teamID uuid.UUID) ([]entity.User, error)
 	GetRandomActiveUsers(ctx context.Context, limit int, excludeIDs ...string) ([]entity.User, error)
+	CreateUsersBatch(ctx context.Context, users []entity.User, teamID uuid.UUID) ([]entity.User, error)
 }
 
 type TeamRepo interface {
