@@ -2,6 +2,7 @@ package app
 
 import (
 	repo_pr "github.com/4udiwe/avito-pr-service/internal/repository/pr"
+	repo_stats "github.com/4udiwe/avito-pr-service/internal/repository/stats"
 	repo_team "github.com/4udiwe/avito-pr-service/internal/repository/team"
 	repo_user "github.com/4udiwe/avito-pr-service/internal/repository/user"
 	"github.com/4udiwe/avito-pr-service/pkg/postgres"
@@ -35,3 +36,10 @@ func (app *App) PRRepo() *repo_pr.Repository {
 	return app.prRepo
 }
 
+func (app *App) StatsRepo() *repo_stats.Repository {
+	if app.statsRepo != nil {
+		return app.statsRepo
+	}
+	app.statsRepo = repo_stats.New(app.Postgres())
+	return app.statsRepo
+}

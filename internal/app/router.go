@@ -45,5 +45,7 @@ func (app *App) configureRouter(handler *echo.Echo) {
 		pullRequestGroup.GET("", app.GetPRsHandler().Handle)
 	}
 
+	handler.GET("/stats", app.GetStatsHandler().Handle)
+
 	handler.GET("/health", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
 }

@@ -8,9 +8,11 @@ import (
 	api "github.com/4udiwe/avito-pr-service/internal/api/http"
 	"github.com/4udiwe/avito-pr-service/internal/database"
 	repo_pr "github.com/4udiwe/avito-pr-service/internal/repository/pr"
+	repo_stats "github.com/4udiwe/avito-pr-service/internal/repository/stats"
 	repo_team "github.com/4udiwe/avito-pr-service/internal/repository/team"
 	repo_user "github.com/4udiwe/avito-pr-service/internal/repository/user"
 	"github.com/4udiwe/avito-pr-service/internal/service/pr"
+	"github.com/4udiwe/avito-pr-service/internal/service/stats"
 	"github.com/4udiwe/avito-pr-service/internal/service/team"
 	"github.com/4udiwe/avito-pr-service/internal/service/user"
 	"github.com/4udiwe/avito-pr-service/pkg/httpserver"
@@ -31,15 +33,17 @@ type App struct {
 	echoHandler *echo.Echo
 
 	// Repositories
-	userRepo *repo_user.Repository
-	teamRepo *repo_team.Repository
-	prRepo   *repo_pr.Repository
+	userRepo  *repo_user.Repository
+	teamRepo  *repo_team.Repository
+	prRepo    *repo_pr.Repository
+	statsRepo *repo_stats.Repository
 
 	// Handlers
 	getPRsHandler         api.Handler
 	getTeamHandler        api.Handler
 	getTeamsHandler       api.Handler
 	getUserReviewsHandler api.Handler
+	getStatsHandler       api.Handler
 
 	postAssignUserToPRHandler   api.Handler
 	postMergePRHandler          api.Handler
@@ -50,9 +54,10 @@ type App struct {
 	postDeactivateTeamHandler   api.Handler
 
 	// Services
-	userService *user.Service
-	teamService *team.Service
-	prService   *pr.Service
+	userService  *user.Service
+	teamService  *team.Service
+	prService    *pr.Service
+	statsService *stats.Service
 }
 
 func New(configPath string) *App {

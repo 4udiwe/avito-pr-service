@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/4udiwe/avito-pr-service/internal/service/pr"
+	"github.com/4udiwe/avito-pr-service/internal/service/stats"
 	"github.com/4udiwe/avito-pr-service/internal/service/team"
 	"github.com/4udiwe/avito-pr-service/internal/service/user"
 )
@@ -28,4 +29,12 @@ func (app *App) UserService() *user.Service {
 	}
 	app.userService = user.New(app.UserRepo(), app.PRRepo(), app.Postgres())
 	return app.userService
+}
+
+func (app *App) StatsService() *stats.Service {
+	if app.statsService != nil {
+		return app.statsService
+	}
+	app.statsService = stats.New(app.StatsRepo())
+	return app.statsService
 }

@@ -3,6 +3,7 @@ package app
 import (
 	api "github.com/4udiwe/avito-pr-service/internal/api/http"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_prs"
+	"github.com/4udiwe/avito-pr-service/internal/api/http/get_stats"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_team"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_teams"
 	"github.com/4udiwe/avito-pr-service/internal/api/http/get_user_reviews"
@@ -101,4 +102,12 @@ func (app *App) PostDeactivateTeamHandler() api.Handler {
 	}
 	app.postDeactivateTeamHandler = post_deactivate_team.New(app.TeamService())
 	return app.postDeactivateTeamHandler
+}
+
+func (app *App) GetStatsHandler() api.Handler {
+	if app.getStatsHandler != nil {
+		return app.getStatsHandler
+	}
+	app.getStatsHandler = get_stats.New(app.StatsService())
+	return app.getStatsHandler
 }
