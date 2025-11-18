@@ -1,3 +1,6 @@
+run:
+	docker compose up --build
+
 cover:
 	go test -count=1 -coverprofile=coverage.out $(shell go list ./internal/... | grep -E "internal/service" | grep -v -E "mocks|decorator|stats")
 	go tool cover -func=coverage.out

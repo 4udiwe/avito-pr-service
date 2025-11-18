@@ -9,10 +9,14 @@
 git clone https://github.com/4udiwe/avito-pr-service.git
 cd avito-pr-service
 ```
-2. Создайте файл `.env` в корне проекта (можно скопировать [`.env.example`](.env.example)).
+2. Создайте файл `.env` в корне проекта (можно скопировать [`.env.example`](.env.example)). Для удобства проверки задания файл `.env` также был добавлен в репозиторий.
 3. Выполните команду
 ```
 docker compose up --build -d
+```
+или
+```
+make run
 ```
 4. Для остановки используйте команду
 ```
